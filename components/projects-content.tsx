@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { ProjectHeader } from "@/components/project-header"
 import { ProjectTimeline } from "@/components/project-timeline"
@@ -23,6 +23,9 @@ export function ProjectsContent() {
 
   const [filters, setFilters] = useState<{ key: string; value: string }[]>([])
 
+  const isSyncingRef = useRef(false)
+  const prevParamsRef = useRef<string>("")
+
   const removeFilter = (key: string, value: string) => {
     const next = filters.filter((f) => !(f.key === key && f.value === value))
     setFilters(next)
@@ -34,8 +37,19 @@ export function ProjectsContent() {
     replaceUrlFromChips(chips)
   }
 
-  // Initialize from URL on first load and keep in sync when URL changes externally
   useEffect(() => {
+    const currentParams = searchParams.toString()
+
+    // Only sync if this is the first load or if params actually changed (not from our own update)
+    if (prevParamsRef.current === currentParams) return
+
+    // If we just made an update, skip this sync to avoid feedback loop
+    if (isSyncingRef.current) {
+      isSyncingRef.current = false
+      return
+    }
+
+    prevParamsRef.current = currentParams
     const params = new URLSearchParams(searchParams as any)
     const chips = paramsToChips(params)
     setFilters(chips)
@@ -46,6 +60,9 @@ export function ProjectsContent() {
     const params = chipsToParams(chips)
     const qs = params.toString()
     const url = qs ? `${pathname}?${qs}` : pathname
+
+    isSyncingRef.current = true
+    prevParamsRef.current = qs
     router.replace(url, { scroll: false })
   }
 
@@ -102,8 +119,4 @@ function paramsToChips(params: URLSearchParams) {
   add("Tag", params.get("tags"))
   add("Member", params.get("members"))
   return chips
-}
-
-function replaceUrlFromChips(chips: { key: string; value: string }[]) {
-  // This function will be replaced in component scope where router is available
 }
