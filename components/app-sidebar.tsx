@@ -24,7 +24,6 @@ import {
   Users,
   ChartBar,
   Gear,
-  Layout,
   Question,
   CaretRight,
   CaretUpDown,
@@ -41,7 +40,6 @@ const navItemIcons: Record<NavItemId, React.ComponentType<{ className?: string }
 
 const footerItemIcons: Record<SidebarFooterItemId, React.ComponentType<{ className?: string }>> = {
   settings: Gear,
-  templates: Layout,
   help: Question,
 }
 
