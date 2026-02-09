@@ -16,7 +16,7 @@
 
 import { useState, useCallback, useEffect } from "react"
 import { AnimatePresence, motion } from "motion/react"
-import { X, ArrowsOut, ArrowsIn, Plus, GearSix, ClockCounterClockwise, ChatCircleDots } from "@phosphor-icons/react"
+import { X, ArrowsOut, ArrowsIn, Plus, Brain, ClockCounterClockwise, ChatCircleDots } from "@phosphor-icons/react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,7 +26,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { AIChatPanel } from "./AIChatPanel"
-import { SettingsPanel } from "./SettingsPanel"
+import { TinyBrain } from "./TinyBrain"
 import { TinyFace } from "./TinyFace"
 import { useAICoderSessions } from "@/hooks/useAICoderHistory"
 import { useAuth } from "@/contexts/AuthContext"
@@ -197,13 +197,13 @@ export function AIChatWidget() {
                   </DropdownMenuContent>
                 </DropdownMenu>
 
-                {/* Settings */}
+                {/* Tiny Brain */}
                 <button
                   onClick={() => setShowSettings(true)}
                   className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-muted transition-colors"
-                  title="Settings"
+                  title="Tiny Brain"
                 >
-                  <GearSix className="h-4 w-4 text-muted-foreground" />
+                  <Brain className="h-4 w-4 text-muted-foreground" weight="duotone" />
                 </button>
 
                 {/* Expand / collapse toggle */}
@@ -234,34 +234,19 @@ export function AIChatWidget() {
 
             {/* Chat panel fills remaining height */}
             <div className="flex-1 overflow-hidden">
-              {/* Panel rendered below, outside AnimatePresence */}
+              {activeSessionId && (
+                <AIChatPanel
+                  key={activeSessionId}
+                  skills={config.skills}
+                  embedded
+                  sessionId={activeSessionId}
+                  onLoadingChange={setIsAIWorking}
+                />
+              )}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Chat panel — kept mounted so useChat state survives open/close.
-          Rendered in a portal-style fixed div that sits behind the panel shell. */}
-      {activeSessionId && (
-        <div
-          className={
-            isOpen
-              ? isExpanded
-                ? "fixed inset-4 z-50 pt-[57px] rounded-2xl overflow-hidden pointer-events-auto"
-                : "fixed bottom-24 right-6 z-50 w-[420px] h-[600px] max-h-[calc(100vh-120px)] pt-[57px] rounded-2xl overflow-hidden pointer-events-auto"
-              : "fixed -left-[9999px] w-0 h-0 overflow-hidden pointer-events-none opacity-0"
-          }
-          style={!isExpanded && isOpen ? { maxWidth: "calc(100vw - 32px)" } : undefined}
-        >
-          <AIChatPanel
-            key={activeSessionId}
-            skills={config.skills}
-            embedded
-            sessionId={activeSessionId}
-            onLoadingChange={setIsAIWorking}
-          />
-        </div>
-      )}
 
       {/* Floating action button */}
       <motion.button
@@ -315,8 +300,8 @@ export function AIChatWidget() {
         )}
       </motion.button>
 
-      {/* Settings dialog */}
-      <SettingsPanel open={showSettings} onOpenChange={setShowSettings} />
+      {/* Tiny Brain dialog */}
+      <TinyBrain open={showSettings} onOpenChange={setShowSettings} />
     </>
   )
 }

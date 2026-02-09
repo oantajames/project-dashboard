@@ -96,6 +96,21 @@ export interface AICoderProjectConfig {
   defaultBranch: string
 }
 
+// ── Product Context (editable via Tiny Brain UI) ──
+
+export interface AICoderProductContext {
+  /** What the product is and who it's for */
+  productDescription: string
+  /** Entity relationships in plain English */
+  dataModel: string
+  /** How to implement Firestore operations */
+  firestorePatterns: string
+  /** UI aesthetic rules (design system, spacing, colors) */
+  styleGuide: string
+  /** Scope management and clarification rules */
+  scopeRules: string
+}
+
 // ── Full Config ──
 
 export interface AICoderConfig {
@@ -105,6 +120,8 @@ export interface AICoderConfig {
   git: AICoderGitConfig
   sandbox: AICoderSandboxConfig
   deploy: AICoderDeployConfig
+  /** Product context — injected into system prompt and sandbox CLAUDE.md */
+  productContext?: AICoderProductContext
 }
 
 // ── Pipeline Execution ──

@@ -18,7 +18,8 @@ import {
 } from "firebase/firestore"
 import { db } from "@/lib/firebase"
 import staticConfig from "@/ai-coder.config"
-import type { AICoderConfig, AICoderRules, AICoderSkill } from "./types"
+import { mergeProductContext } from "./product-context"
+import type { AICoderConfig, AICoderRules, AICoderSkill, AICoderProductContext } from "./types"
 
 /** Firestore document path for config overrides */
 const CONFIG_DOC_PATH = "aiCoderConfig/current"
@@ -27,6 +28,7 @@ const CONFIG_DOC_PATH = "aiCoderConfig/current"
 export interface ConfigOverrides {
   rules?: Partial<AICoderRules>
   skills?: AICoderSkill[]
+  productContext?: Partial<AICoderProductContext>
   updatedAt?: unknown // Firestore Timestamp
   updatedBy?: string
 }
@@ -52,7 +54,7 @@ export async function getConfigOverrides(): Promise<ConfigOverrides | null> {
  * comes from the static file.
  */
 export async function saveConfigOverrides(
-  overrides: Pick<ConfigOverrides, "rules" | "skills">,
+  overrides: Pick<ConfigOverrides, "rules" | "skills" | "productContext">,
   userId?: string
 ): Promise<void> {
   await setDoc(
@@ -116,5 +118,8 @@ export function mergeConfig(
     skills: overrides.skills && overrides.skills.length > 0
       ? overrides.skills
       : base.skills,
+
+    // Product context: merge individual fields (non-empty overrides win)
+    productContext: mergeProductContext(overrides.productContext),
   }
 }

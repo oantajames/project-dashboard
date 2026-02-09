@@ -7,6 +7,7 @@
  * 3. Post-diff validation (validateDiff) — checks after the AI finishes, before PR
  */
 
+import { buildProductContextPrompt, mergeProductContext } from "./product-context"
 import type { AICoderConfig, AICoderSkill } from "./types"
 
 // ── Suspicious patterns that may indicate prompt injection ──
@@ -106,7 +107,15 @@ export function buildSystemPrompt(
   const maxFiles = skill.maxFilesPerChange ?? rules.maxFilesPerChange
   const canCreateFiles = skill.allowNewFiles ?? rules.allowNewFiles
 
+  // Inject product context (merged static defaults + Firestore edits)
+  const productContext = mergeProductContext(config.productContext)
+  const productContextBlock = buildProductContextPrompt(productContext)
+
   const sections = [
+    // Product context — gives the AI full knowledge of the product
+    productContextBlock,
+    "",
+
     // Role definition
     `You are an AI coding assistant modifying the "${project.name}" codebase.`,
     `You are operating under the "${skill.name}" skill.`,

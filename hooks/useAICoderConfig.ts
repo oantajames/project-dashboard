@@ -15,7 +15,7 @@ import { db } from "@/lib/firebase"
 import { useAuth } from "@/contexts/AuthContext"
 import staticConfig from "@/ai-coder.config"
 import { mergeConfig, saveConfigOverrides, type ConfigOverrides } from "@/lib/ai-coder/config-store"
-import type { AICoderConfig, AICoderRules, AICoderSkill } from "@/lib/ai-coder/types"
+import type { AICoderConfig, AICoderRules, AICoderSkill, AICoderProductContext } from "@/lib/ai-coder/types"
 
 export function useAICoderConfig() {
   const { user } = useAuth()
@@ -71,5 +71,17 @@ export function useAICoderConfig() {
     [user]
   )
 
-  return { config, loading, updateRules, updateSkills }
+  /**
+   * Update the product context overrides in Firestore.
+   * Accepts a partial context — only provided fields are overridden.
+   */
+  const updateProductContext = useCallback(
+    async (productContext: Partial<AICoderProductContext>) => {
+      const merged = { ...(overrides?.productContext || {}), ...productContext }
+      await saveConfigOverrides({ productContext: merged }, user?.id)
+    },
+    [overrides, user]
+  )
+
+  return { config, loading, updateRules, updateSkills, updateProductContext }
 }

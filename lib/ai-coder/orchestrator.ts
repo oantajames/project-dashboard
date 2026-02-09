@@ -12,6 +12,7 @@
 
 import { Sandbox } from "@e2b/code-interpreter"
 import { validateDiff } from "./rules-engine"
+import { buildProductContextPrompt, mergeProductContext } from "./product-context"
 import type { AICoderConfig, AICoderSkill } from "./types"
 
 // ── Constants ──
@@ -235,7 +236,15 @@ function buildClaudeRulesFile(skill: AICoderSkill, config: AICoderConfig): strin
     ? [...new Set([...rules.allowed, ...skill.allowedPaths])]
     : rules.allowed
 
-  return `# AI Coder Rules
+  // Build product context section (merged static defaults + Firestore edits)
+  const productContext = mergeProductContext(config.productContext)
+  const productContextBlock = buildProductContextPrompt(productContext)
+
+  return `${productContextBlock}
+
+---
+
+# AI Coder Rules
 
 ## You MUST follow these rules at all times
 

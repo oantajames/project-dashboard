@@ -51,6 +51,8 @@ export function AIChatPanel({
   const [screenContext, setScreenContext] = useState<ScreenContext | null>(null)
   const [isScanning, setIsScanning] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const isNearBottomRef = useRef(true)
 
   // ── Firestore persistence ──
   const { messages: firestoreMessages, loading: firestoreLoading, saveMessage } = useAICoderMessages(sessionId)
@@ -233,9 +235,27 @@ export function AIChatPanel({
     }
   }, [stop])
 
-  // Auto-scroll
+  // Track whether the user is scrolled near the bottom of the chat.
+  // If they've scrolled up to read, we don't force them back down.
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container
+      // "Near bottom" = within 120px of the bottom edge
+      isNearBottomRef.current = scrollHeight - scrollTop - clientHeight < 120
+    }
+
+    container.addEventListener("scroll", handleScroll, { passive: true })
+    return () => container.removeEventListener("scroll", handleScroll)
+  }, [])
+
+  // Auto-scroll only when the user is already near the bottom
+  useEffect(() => {
+    if (isNearBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+    }
   }, [messages])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -308,7 +328,7 @@ export function AIChatPanel({
       )}
 
       {/* Messages area */}
-      <div className={`flex-1 overflow-y-auto py-4 ${embedded ? "px-4" : "px-6"}`}>
+      <div ref={scrollContainerRef} className={`flex-1 overflow-y-auto py-4 ${embedded ? "px-4" : "px-6"}`}>
         {messages.length === 0 ? (
           <EmptyState compact={embedded} />
         ) : (
