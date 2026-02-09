@@ -549,7 +549,7 @@ export function ProjectTimeline() {
                               )}
                             />
                             <div className="flex flex-col flex-1 min-w-0">
-                              <span className={cn("text-md truncate", task.status === "done" && "line-through text-muted-foreground")}>
+                              <span className={cn("text-md truncate", task.status === "done" && "text-muted-foreground")}>
                                 {task.name}
                               </span>
                               <div className="flex items-center gap-2 text-xs text-muted-foreground">

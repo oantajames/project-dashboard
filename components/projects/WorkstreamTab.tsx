@@ -380,7 +380,7 @@ function TaskRow({ task, onToggle, activeTaskId, overTaskId }: TaskRowProps) {
         <span
           className={cn(
             "flex-1 truncate text-left",
-            isDone && "line-through text-muted-foreground",
+            isDone && "text-muted-foreground",
           )}
         >
           {task.name}

@@ -62,7 +62,7 @@ export function IntakeInput({
   );
 }
 
-/** Custom styled checkbox with blue fill and line-through */
+/** Custom styled checkbox with blue fill and muted text when checked */
 export function IntakeCheckbox({
   label,
   checked,
@@ -91,7 +91,7 @@ export function IntakeCheckbox({
       <span
         className={cn(
           "text-sm transition-all break-words flex-1",
-          checked ? "line-through text-muted-foreground" : "text-foreground"
+          checked ? "text-muted-foreground" : "text-foreground"
         )}
       >
         {label}

@@ -148,7 +148,7 @@ function IntakeTextarea({
   )
 }
 
-/** Custom styled checkbox: blue fill + line-through label */
+/** Custom styled checkbox: blue fill with muted text when checked */
 function IntakeCheckbox({
   label,
   checked,
@@ -177,7 +177,7 @@ function IntakeCheckbox({
       <span
         className={cn(
           "text-sm transition-all break-words flex-1",
-          checked ? "line-through text-muted-foreground" : "text-foreground"
+          checked ? "text-muted-foreground" : "text-foreground"
         )}
       >
         {label}

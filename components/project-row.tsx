@@ -92,7 +92,7 @@ function TaskRow({ task, dates, cellWidth }: TaskRowProps) {
           className={cn("h-4 w-4 rounded-sm", checked && "bg-teal-500 border-teal-500")}
         />
         <div className="flex flex-col flex-1 min-w-0">
-          <span className={cn("text-sm truncate", checked && "line-through text-muted-foreground")}>{task.name}</span>
+          <span className={cn("text-sm truncate", checked && "text-muted-foreground")}>{task.name}</span>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span>{task.assignee}</span>
             <ChartBar className="h-3 w-3" />
