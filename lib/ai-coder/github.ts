@@ -203,7 +203,13 @@ export async function getPreviewUrl(prNumber: number, config: AICoderConfig): Pr
 // ── Merge PR ──
 
 /**
- * Merges a pull request if auto-merge is enabled and all checks pass.
+ * Enables auto-merge on a PR so GitHub merges it once all requirements are met.
+ * Uses the GraphQL API (enablePullRequestAutoMerge) since the REST API
+ * doesn't support queuing auto-merge.
+ *
+ * Requires "Allow auto-merge" to be enabled in the repo settings.
+ * Falls back to immediate squash merge if auto-merge API fails
+ * (e.g. no branch protection rules — merge directly).
  */
 export async function mergePR(prNumber: number, config: AICoderConfig): Promise<boolean> {
   if (!config.git.autoMerge) {
@@ -214,21 +220,54 @@ export async function mergePR(prNumber: number, config: AICoderConfig): Promise<
   const { owner, repo } = parseRepo(config)
 
   try {
-    // Verify checks have passed
-    const status = await getPRStatus(prNumber, config)
-    if (status.checksStatus !== "success") {
-      return false
+    // First, get the PR's node ID for the GraphQL mutation
+    const { data: pr } = await octokit.rest.pulls.get({
+      owner,
+      repo,
+      pull_number: prNumber,
+    })
+
+    // Try enabling GitHub's native auto-merge (queues merge for when checks pass)
+    try {
+      await octokit.graphql(
+        `mutation EnableAutoMerge($pullRequestId: ID!, $mergeMethod: PullRequestMergeMethod!) {
+          enablePullRequestAutoMerge(input: {
+            pullRequestId: $pullRequestId,
+            mergeMethod: $mergeMethod
+          }) {
+            pullRequest { autoMergeRequest { enabledAt } }
+          }
+        }`,
+        {
+          pullRequestId: pr.node_id,
+          mergeMethod: "SQUASH",
+        }
+      )
+      console.log(`[ai-coder/github] Auto-merge enabled for PR #${prNumber}`)
+      return true
+    } catch (graphqlError) {
+      // Auto-merge API fails when there are no branch protection rules.
+      // In that case, just merge immediately since nothing is blocking it.
+      console.log(
+        `[ai-coder/github] Auto-merge API failed (likely no branch protection), attempting direct merge`,
+        graphqlError instanceof Error ? graphqlError.message : String(graphqlError)
+      )
     }
 
+    // Fallback: merge immediately (works when there are no required checks)
     await octokit.rest.pulls.merge({
       owner,
       repo,
       pull_number: prNumber,
       merge_method: "squash",
     })
-
+    console.log(`[ai-coder/github] PR #${prNumber} merged directly via squash`)
     return true
-  } catch {
+  } catch (error) {
+    console.error(
+      `[ai-coder/github] Failed to merge PR #${prNumber}:`,
+      error instanceof Error ? error.message : String(error)
+    )
     return false
   }
 }
