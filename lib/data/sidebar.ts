@@ -1,6 +1,6 @@
 export type NavItemId = "dashboard" | "projects" | "clients" | "invoices" | "contracts"
 
-export type SidebarFooterItemId = "settings" | "help"
+export type SidebarFooterItemId = "settings"
 
 export type NavItem = {
     id: NavItemId
@@ -38,5 +38,4 @@ export const activeProjects: ActiveProjectSummary[] = [
 
 export const footerItems: SidebarFooterItem[] = [
     { id: "settings", label: "Settings" },
-    { id: "help", label: "Help" },
 ]
