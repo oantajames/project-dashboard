@@ -6,7 +6,7 @@ import { FilterChip } from "@/components/filter-chip"
 import { ViewOptionsPopover } from "@/components/view-options-popover"
 import { FilterPopover } from "@/components/filter-popover"
 import { ChipOverflow } from "@/components/chip-overflow"
-import { Link as LinkIcon, Plus, Sparkle } from "@phosphor-icons/react/dist/ssr"
+import { Plus, Sparkle } from "@phosphor-icons/react/dist/ssr"
 import type { FilterCounts } from "@/lib/data/projects"
 import type { FilterChip as FilterChipType, ViewOptions } from "@/lib/view-options"
 
@@ -29,9 +29,6 @@ export function ProjectHeader({ filters, onRemoveFilter, onFiltersChange, counts
           <p className="text-base font-medium text-foreground">Projects</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg">
-            <LinkIcon className="h-4 w-4" />
-          </Button>
           <Button variant="ghost" size="sm" onClick={onAddProject}>
             <Plus className="h-4 w-4" weight="bold" />
             Add Project
