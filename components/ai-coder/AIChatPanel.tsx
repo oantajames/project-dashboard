@@ -79,14 +79,6 @@ export function AIChatPanel({
     savedMessageIds.current = new Set(firestoreMessages.map((m) => m.id))
   }, [firestoreMessages])
 
-  // Refs for save-on-unmount (capture latest values without stale closures)
-  const messagesRef = useRef(messages)
-  const saveMessageRef = useRef(saveMessage)
-  const sessionIdRef = useRef(sessionId)
-  useEffect(() => { messagesRef.current = messages }, [messages])
-  useEffect(() => { saveMessageRef.current = saveMessage }, [saveMessage])
-  useEffect(() => { sessionIdRef.current = sessionId }, [sessionId])
-
   // Refs for stable transport closure
   const skillIdRef = useRef(selectedSkillId)
   const screenContextRef = useRef(screenContext)
@@ -134,6 +126,15 @@ export function AIChatPanel({
     // Seed with persisted messages when session has history
     initialMessages: initialMessages.length > 0 ? initialMessages : undefined,
   })
+
+  // Refs for save-on-unmount (capture latest values without stale closures)
+  // NOTE: These must come AFTER useChat so `messages` is defined
+  const messagesRef = useRef(messages)
+  const saveMessageRef = useRef(saveMessage)
+  const sessionIdRef = useRef(sessionId)
+  useEffect(() => { messagesRef.current = messages }, [messages])
+  useEffect(() => { saveMessageRef.current = saveMessage }, [saveMessage])
+  useEffect(() => { sessionIdRef.current = sessionId }, [sessionId])
 
   const isLoading = status === "submitted" || status === "streaming"
   const prevStatusRef = useRef(status)
