@@ -23,7 +23,10 @@ export interface PipelineLiveData {
   branchName?: string
   filesChanged?: string[]
   checksStatus?: string
-  previewUrl?: string | null
+  /** Deployment status set by the Vercel deployment webhook */
+  deployStatus?: string
+  /** Production URL after successful deploy */
+  deployUrl?: string
 }
 
 /**
@@ -62,7 +65,8 @@ export function useAICoderPipelineStatus(requestId: string | null) {
           branchName: data.branchName as string | undefined,
           filesChanged: data.filesChanged as string[] | undefined,
           checksStatus: data.checksStatus as string | undefined,
-          previewUrl: data.previewUrl as string | null | undefined,
+          deployStatus: data.deployStatus as string | undefined,
+          deployUrl: data.deployUrl as string | undefined,
         })
       },
       (err) => {

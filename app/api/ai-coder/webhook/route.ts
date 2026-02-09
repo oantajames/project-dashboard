@@ -140,44 +140,55 @@ async function handleCheckRunEvent(payload: {
 }
 
 /**
- * Handles deployment_status events (Vercel preview deploys).
- * Updates the preview URL on the Firestore request document.
+ * Handles deployment_status events (Vercel deploys after merge).
+ * Writes to `deployStatus` / `deployUrl` — never overwrites `status`.
  */
 async function handleDeploymentStatus(payload: {
   deployment_status: {
     state: string
     environment_url?: string
     target_url?: string
+    environment?: string
   }
   deployment: {
     sha: string
+    environment?: string
   }
 }) {
-  const { deployment_status } = payload
+  const { deployment_status, deployment } = payload
   if (deployment_status.state !== "success") return
 
-  const previewUrl =
+  // Only track production deployments (not preview/staging)
+  const env = deployment_status.environment || deployment.environment || ""
+  const isProduction = env.toLowerCase().includes("production") || env === "Production"
+
+  const deployUrl =
     deployment_status.environment_url || deployment_status.target_url
-  if (!previewUrl) return
+  if (!deployUrl) return
 
   const db = getAdminDb()
 
-  // Find request by deployment SHA — this is a best-effort match
-  // since we store the commitSha from the sandbox
+  // Match the most recently merged request (status = "complete")
+  // This is best-effort — works well for single-developer workflows.
   const snapshot = await db
     .collection("aiCoderRequests")
-    .where("status", "==", "creating_pr")
-    .orderBy("createdAt", "desc")
-    .limit(5)
+    .where("status", "==", "complete")
+    .orderBy("updatedAt", "desc")
+    .limit(1)
     .get()
 
   if (snapshot.empty) return
 
-  // Update the most recent matching request with the preview URL
   const docRef = snapshot.docs[0].ref
+  const existing = snapshot.docs[0].data()
+
+  // Skip if this request already has a deploy URL
+  if (existing.deployStatus === "success") return
+
   await docRef.update({
-    previewUrl,
-    status: "deploying",
+    deployStatus: "success",
+    deployUrl,
+    deployIsProduction: isProduction,
     updatedAt: new Date(),
   })
 }

@@ -3,12 +3,8 @@
 /**
  * Tiny Viber — Live PR Status Card
  *
- * Extends the static PRStatusCard with real-time status updates from Firestore.
- * Subscribes to the aiCoderRequests doc via useAICoderPipelineStatus hook.
- * Shows a live status timeline: PR Created → CI Checks → Preview → Merged.
- *
- * Updates automatically when GitHub webhooks fire (check_run, deployment_status,
- * pull_request events).
+ * Real-time PR lifecycle: PR Created → CI Checks → Merged → Deployed.
+ * Subscribes to the Firestore request doc for webhook-driven updates.
  */
 
 import { Card, CardContent } from "@/components/ui/card"
@@ -23,6 +19,7 @@ import {
   CircleNotch,
   ArrowSquareOut,
   Broadcast,
+  RocketLaunch,
 } from "@phosphor-icons/react"
 
 interface LivePRStatusCardProps {
@@ -41,15 +38,16 @@ export function LivePRStatusCard({
   branchName,
   filesChanged,
 }: LivePRStatusCardProps) {
-  // Subscribe directly to the pipeline doc by ID (more reliable than querying by prNumber)
   const { liveData } = useAICoderPipelineStatus(requestId ?? null)
 
   // Derive statuses from live data (fallback to initial states)
   const checksStatus = liveData?.checksStatus || "pending"
-  const previewUrl = liveData?.previewUrl || null
   const pipelineStatus = liveData?.status || "deploying"
+  const deployStatus = liveData?.deployStatus
+  const deployUrl = liveData?.deployUrl
   const isMerged = pipelineStatus === "complete"
   const isFailed = pipelineStatus === "failed"
+  const isDeployed = deployStatus === "success"
   const isLive = liveData !== null
 
   return (
@@ -84,22 +82,24 @@ export function LivePRStatusCard({
           </a>
         </div>
 
-        {/* Live status timeline */}
+        {/* Live status timeline — correct order: PR → CI → Merged → Deployed */}
         <div className="space-y-2 py-1">
-          {/* PR Created */}
+          {/* 1. PR Created — always done at this point */}
           <StatusRow
             icon={<CheckCircle className="h-3.5 w-3.5 text-emerald-500" weight="fill" />}
             label="Pull request created"
             status="done"
           />
 
-          {/* CI Checks */}
+          {/* 2. CI Checks */}
           <StatusRow
             icon={
               checksStatus === "success" ? (
                 <CheckCircle className="h-3.5 w-3.5 text-emerald-500" weight="fill" />
               ) : checksStatus === "failure" ? (
                 <XCircle className="h-3.5 w-3.5 text-destructive" weight="fill" />
+              ) : checksStatus === "neutral" ? (
+                <CheckCircle className="h-3.5 w-3.5 text-muted-foreground/50" weight="fill" />
               ) : (
                 <CircleNotch className="h-3.5 w-3.5 text-blue-500 animate-spin" />
               )
@@ -110,7 +110,7 @@ export function LivePRStatusCard({
                 : checksStatus === "failure"
                   ? "CI checks failed"
                   : checksStatus === "neutral"
-                    ? "No CI checks configured"
+                    ? "No CI checks"
                     : "CI checks running..."
             }
             status={
@@ -122,34 +122,7 @@ export function LivePRStatusCard({
             }
           />
 
-          {/* Preview Deploy */}
-          <StatusRow
-            icon={
-              previewUrl ? (
-                <CheckCircle className="h-3.5 w-3.5 text-emerald-500" weight="fill" />
-              ) : (
-                <CircleNotch className="h-3.5 w-3.5 text-blue-500 animate-spin" />
-              )
-            }
-            label={
-              previewUrl ? (
-                <a
-                  href={previewUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-500 hover:text-blue-600 hover:underline inline-flex items-center gap-1"
-                >
-                  Preview ready
-                  <ArrowSquareOut className="h-2.5 w-2.5" />
-                </a>
-              ) : (
-                "Deploying preview..."
-              )
-            }
-            status={previewUrl ? "done" : "pending"}
-          />
-
-          {/* Merge status */}
+          {/* 3. Merged */}
           <StatusRow
             icon={
               isMerged ? (
@@ -157,17 +130,50 @@ export function LivePRStatusCard({
               ) : isFailed ? (
                 <XCircle className="h-3.5 w-3.5 text-destructive" weight="fill" />
               ) : (
-                <Clock className="h-3.5 w-3.5 text-muted-foreground/50" />
+                <CircleNotch className="h-3.5 w-3.5 text-blue-500 animate-spin" />
               )
             }
             label={
               isMerged
-                ? "Merged"
+                ? "Merged to main"
                 : isFailed
                   ? liveData?.error || "PR closed without merge"
-                  : "Waiting to merge"
+                  : "Merging..."
             }
-            status={isMerged ? "done" : isFailed ? "failed" : "waiting"}
+            status={isMerged ? "done" : isFailed ? "failed" : "pending"}
+          />
+
+          {/* 4. Deployed via Vercel */}
+          <StatusRow
+            icon={
+              isDeployed ? (
+                <RocketLaunch className="h-3.5 w-3.5 text-emerald-500" weight="fill" />
+              ) : isMerged ? (
+                <CircleNotch className="h-3.5 w-3.5 text-blue-500 animate-spin" />
+              ) : (
+                <Clock className="h-3.5 w-3.5 text-muted-foreground/40" />
+              )
+            }
+            label={
+              isDeployed && deployUrl ? (
+                <a
+                  href={deployUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-500 hover:text-blue-600 hover:underline inline-flex items-center gap-1"
+                >
+                  Deployed
+                  <ArrowSquareOut className="h-2.5 w-2.5" />
+                </a>
+              ) : isDeployed ? (
+                "Deployed"
+              ) : isMerged ? (
+                "Deploying to Vercel..."
+              ) : (
+                "Deploy"
+              )
+            }
+            status={isDeployed ? "done" : isMerged ? "pending" : "waiting"}
           />
         </div>
 
