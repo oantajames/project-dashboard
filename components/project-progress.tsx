@@ -1,12 +1,18 @@
 "use client"
 
 import { ListChecks } from "@phosphor-icons/react/dist/ssr"
-import type { Project } from "@/lib/data/projects"
+import type { Project } from "@/lib/types"
 import { ProgressCircle } from "@/components/progress-circle"
 import { cn } from "@/lib/utils"
 
+// Extended project type with optional computed fields
+type DisplayProject = Project & {
+  taskCount?: number
+  completedTaskCount?: number
+}
+
 export type ProjectProgressProps = {
-  project: Project
+  project: DisplayProject
   className?: string
   /**
    * Progress circle size in pixels, default 18px (matches sidebar Active Projects)
@@ -18,11 +24,9 @@ export type ProjectProgressProps = {
   showTaskSummary?: boolean
 }
 
-function computeProjectProgress(project: Project) {
-  const totalTasks = project.tasks?.length ?? project.taskCount ?? 0
-  const doneTasks = project.tasks
-    ? project.tasks.filter((t) => t.status === "done").length
-    : Math.round(((project.progress ?? 0) / 100) * totalTasks)
+function computeProjectProgress(project: DisplayProject) {
+  const totalTasks = project.taskCount ?? 0
+  const doneTasks = project.completedTaskCount ?? Math.round(((project.progress ?? 0) / 100) * totalTasks)
 
   const percent = typeof project.progress === "number"
     ? project.progress
@@ -38,10 +42,10 @@ function computeProjectProgress(project: Project) {
 }
 
 function getProgressColor(percent: number): string {
-  // Simple threshold-based mapping, aligned with the sidebar palette
-  if (percent >= 80) return "var(--chart-3)" // success
-  if (percent >= 50) return "var(--chart-4)" // mid / warning
-  if (percent > 0) return "var(--chart-5)" // low / risk
+  // Threshold mapping: red <40%, yellow <75%, green >=75%
+  if (percent >= 75) return "var(--chart-3)" // green / success
+  if (percent >= 40) return "var(--chart-4)" // yellow / warning
+  if (percent > 0) return "var(--chart-5)" // red / risk
   return "var(--chart-2)" // neutral for 0%
 }
 

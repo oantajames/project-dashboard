@@ -1,3 +1,5 @@
+import type { ProjectIntake } from "@/lib/types";
+
 export type ProjectMode = 'quick' | 'guided';
 
 export type ProjectIntent = 'delivery' | 'experiment' | 'internal';
@@ -46,4 +48,11 @@ export interface ProjectData {
   stakeholderOwnerships?: OwnershipEntry[];
   structure?: WorkStructure;
   addStarterTasks: boolean;
+
+  // Intake questionnaire data (used by the "Full Brief" wizard path)
+  intake?: ProjectIntake;
+
+  // Quick-create fields for the intake wizard that map to top-level Project fields
+  intakeProjectName?: string;
+  intakeClientId?: string;
 }

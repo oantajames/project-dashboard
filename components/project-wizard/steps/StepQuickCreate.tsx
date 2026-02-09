@@ -1,5 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
-import { motion, AnimatePresence } from "motion/react";
+import React, { useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { Calendar } from "../../ui/calendar";
@@ -17,44 +16,42 @@ import {
   CommandItem,
   CommandList,
 } from "../../ui/command";
-import { Check, X, CornersOut, Star, CalendarBlank, UserCircle, Spinner, List, Paperclip, Microphone, Rows, ChartBar, Tag } from "@phosphor-icons/react/dist/ssr";
+import { Check, X, CalendarBlank, UserCircle, Spinner, List, Paperclip, Microphone, Rows, ChartBar, Tag, Buildings } from "@phosphor-icons/react/dist/ssr";
 import { ProjectDescriptionEditor } from "../ProjectDescriptionEditor";
+import { useClients } from "@/hooks/useClients";
+import { useAuth } from "@/contexts/AuthContext";
+import type { CreateProjectData, ProjectStatus, ProjectPriority } from "@/lib/types";
 
-// --- Mock Data ---
+// --- Static Options ---
 
-const USERS = [
-  { id: "1", name: "Jason D", avatar: "/avatar-profile.jpg" },
-  { id: "2", name: "Sarah Connor", avatar: "" },
-  { id: "3", name: "Alex Murphy", avatar: "" },
-];
-
-const STATUSES = [
+const STATUSES: { id: ProjectStatus; label: string; dotClass: string }[] = [
   { id: "backlog", label: "Backlog", dotClass: "bg-orange-600" },
-  { id: "todo", label: "Todo", dotClass: "bg-neutral-300" },
-  { id: "in-progress", label: "In Progress", dotClass: "bg-yellow-400" },
-  { id: "done", label: "Done", dotClass: "bg-green-600" },
-  { id: "canceled", label: "Canceled", dotClass: "bg-neutral-400" },
+  { id: "planned", label: "Planned", dotClass: "bg-neutral-300" },
+  { id: "active", label: "Active", dotClass: "bg-yellow-400" },
+  { id: "completed", label: "Completed", dotClass: "bg-green-600" },
+  { id: "cancelled", label: "Cancelled", dotClass: "bg-neutral-400" },
 ];
 
-const PRIORITIES = [
-  { id: "no-priority", label: "No Priority", icon: "BarChart" },
-  { id: "urgent", label: "Urgent", icon: "AlertCircle" },
-  { id: "high", label: "High", icon: "ArrowUp" },
-  { id: "medium", label: "Medium", icon: "ArrowRight" },
-  { id: "low", label: "Low", icon: "ArrowDown" },
+const PRIORITIES: { id: ProjectPriority; label: string }[] = [
+  { id: "urgent", label: "Urgent" },
+  { id: "high", label: "High" },
+  { id: "medium", label: "Medium" },
+  { id: "low", label: "Low" },
 ];
 
-const SPRINT_TYPES = [
-  { id: "design", label: "Design Sprint" },
-  { id: "dev", label: "Dev Sprint" },
-  { id: "planning", label: "Planning" },
+const PROJECT_TYPES = [
+  { id: "mvp", label: "MVP" },
+  { id: "revamp", label: "Revamp" },
+  { id: "audit", label: "Audit" },
+  { id: "design-sprint", label: "Design Sprint" },
+  { id: "dev-sprint", label: "Dev Sprint" },
 ];
 
-const WORKSTREAMS = [
-  { id: "frontend", label: "Frontend" },
-  { id: "backend", label: "Backend" },
+const PROJECT_GROUPS = [
   { id: "design", label: "Design" },
-  { id: "qa", label: "QA" },
+  { id: "development", label: "Development" },
+  { id: "marketing", label: "Marketing" },
+  { id: "research", label: "Research" },
 ];
 
 const TAGS = [
@@ -63,29 +60,6 @@ const TAGS = [
   { id: "enhancement", label: "Enhancement", color: "var(--chart-4)" },
   { id: "docs", label: "Documentation", color: "var(--chart-3)" },
 ];
-
-// --- Helper Components ---
-
-function Wrapper({
-  children,
-  className,
-}: React.PropsWithChildren<{ className?: string }>) {
-  return (
-    <div
-      className={cn("relative shrink-0 size-[16px]", className)}
-    >
-      <svg
-        className="block size-full"
-        fill="none"
-        preserveAspectRatio="none"
-        viewBox="0 0 16 16"
-      >
-        {children}
-      </svg>
-    </div>
-  );
-}
-
 
 // --- Pickers ---
 
@@ -175,7 +149,7 @@ function DatePicker({
 
 interface StepQuickCreateProps {
   onClose: () => void;
-  onCreate: () => void;
+  onCreate: (data: CreateProjectData) => void;
   onExpandChange?: (isExpanded: boolean) => void;
 }
 
@@ -184,48 +158,63 @@ export function StepQuickCreate({
   onCreate,
   onExpandChange,
 }: StepQuickCreateProps) {
+  const { user } = useAuth();
+  const { clients } = useClients();
+
   const [title, setTitle] = useState("");
-  // Description is now managed by Tiptap editor
+  const [description, setDescription] = useState("");
+  const descriptionRef = useRef("");
 
   // Data State
-  const [assignee, setAssignee] = useState(USERS[0]);
-  const [startDate, setStartDate] = useState<Date | undefined>(
-    new Date(),
-  );
-  const [lead, setLead] = useState<(typeof USERS)[0] | null>(
-    null,
-  );
-  const [status, setStatus] = useState(STATUSES[1]); // Todo default
-  const [sprintType, setSprintType] = useState<
-    (typeof SPRINT_TYPES)[0] | null
-  >(null);
-  const [targetDate, setTargetDate] = useState<
-    Date | undefined
-  >();
-  const [workstream, setWorkstream] = useState<
-    (typeof WORKSTREAMS)[0] | null
-  >(null);
-  const [priority, setPriority] = useState<
-    (typeof PRIORITIES)[0] | null
-  >(null);
-  const [selectedTag, setSelectedTag] = useState<
-    (typeof TAGS)[0] | null
-  >(null);
+  const [selectedClient, setSelectedClient] = useState<{ id: string; companyName: string } | null>(null);
+  const [startDate, setStartDate] = useState<Date | undefined>(new Date());
+  const [targetDate, setTargetDate] = useState<Date | undefined>();
+  const [status, setStatus] = useState(STATUSES[0]); // Backlog default
+  const [priority, setPriority] = useState<(typeof PRIORITIES)[0] | null>(null);
+  const [projectType, setProjectType] = useState<(typeof PROJECT_TYPES)[0] | null>(null);
+  const [projectGroup, setProjectGroup] = useState<(typeof PROJECT_GROUPS)[0] | null>(null);
+  const [selectedTag, setSelectedTag] = useState<(typeof TAGS)[0] | null>(null);
+
+  // Set first client as default when clients load
+  useEffect(() => {
+    if (clients.length > 0 && !selectedClient) {
+      setSelectedClient({ id: clients[0].id, companyName: clients[0].companyName });
+    }
+  }, [clients, selectedClient]);
 
   useEffect(() => {
     // Focus title on mount
     const timer = setTimeout(() => {
-      const titleInput = document.getElementById(
-        "quick-create-title",
-      );
+      const titleInput = document.getElementById("quick-create-title");
       if (titleInput) titleInput.focus();
     }, 100);
     return () => clearTimeout(timer);
   }, []);
 
+  const handleCreate = () => {
+    if (!title.trim() || !selectedClient) return;
+
+    const projectData: CreateProjectData = {
+      name: title.trim(),
+      clientId: selectedClient.id,
+      description: descriptionRef.current || undefined,
+      status: status.id,
+      priority: priority?.id || "medium",
+      startDate,
+      endDate: targetDate,
+      tags: selectedTag ? [selectedTag.label] : [],
+      picUserIds: user ? [user.id] : [],
+      supportUserIds: [],
+      group: projectGroup?.label,
+      typeLabel: projectType?.label,
+    };
+
+    onCreate(projectData);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-      onCreate();
+      handleCreate();
     }
   };
 
@@ -266,46 +255,24 @@ export function StepQuickCreate({
 
         {/* Property Buttons - Interactive Dropdowns */}
         <div className="flex flex-wrap gap-2.5 items-start w-full shrink-0">
-          {/* Owner Picker */}
+          {/* Client Picker */}
           <GenericPicker
-            items={USERS}
-            onSelect={setAssignee}
-            selectedId={assignee.id}
-            placeholder="Assign owner..."
+            items={clients.map(c => ({ id: c.id, label: c.companyName, companyName: c.companyName }))}
+            onSelect={(item) => setSelectedClient({ id: item.id, companyName: item.companyName })}
+            selectedId={selectedClient?.id}
+            placeholder="Select client..."
             renderItem={(item, isSelected) => (
               <div className="flex items-center gap-2 w-full">
-                {item.avatar ? (
-                  <img
-                    src={item.avatar}
-                    alt=""
-                    className="size-5 rounded-full object-cover"
-                  />
-                ) : (
-                  <div className="size-5 rounded-full bg-muted flex items-center justify-center text-xs font-bold">
-                    {item.name.charAt(0)}
-                  </div>
-                )}
-                <span className="flex-1">{item.name}</span>
+                <Buildings className="size-4 text-muted-foreground" />
+                <span className="flex-1">{item.label}</span>
                 {isSelected && <Check className="size-4" />}
               </div>
             )}
             trigger={
               <button className="bg-muted flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:border-primary/50 transition-colors">
-                <div className="relative rounded-full size-4 overflow-hidden">
-                  {assignee.avatar ? (
-                    <img
-                      alt=""
-                      className="object-cover size-full"
-                      src={assignee.avatar}
-                    />
-                  ) : (
-                    <div className="bg-muted size-full flex items-center justify-center text-xs">
-                      {assignee.name.charAt(0)}
-                    </div>
-                  )}
-                </div>
+                <Buildings className="size-4 text-muted-foreground" />
                 <span className="font-medium text-foreground text-sm leading-5">
-                  {assignee.name}
+                  {selectedClient ? selectedClient.companyName : "Select Client"}
                 </span>
               </button>
             }
@@ -327,33 +294,17 @@ export function StepQuickCreate({
             }
           />
 
-          {/* Lead Picker */}
-          <GenericPicker
-            items={USERS}
-            onSelect={setLead}
-            selectedId={lead?.id}
-            placeholder="Assign lead..."
-            renderItem={(item, isSelected) => (
-              <div className="flex items-center gap-2 w-full">
-                <div className="size-5 rounded-full bg-muted flex items-center justify-center text-xs font-bold">
-                  {item.name.charAt(0)}
-                </div>
-                <span className="flex-1">{item.name}</span>
-                {isSelected && <Check className="size-4" />}
-              </div>
-            )}
+          {/* Target Date Picker */}
+          <DatePicker
+            date={targetDate}
+            onSelect={setTargetDate}
             trigger={
-              <button
-                className={cn(
-                  "flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border transition-colors",
-                  lead
-                    ? "bg-muted"
-                    : "bg-background hover:bg-black/5",
-                )}
-              >
-                <UserCircle className="size-4 text-muted-foreground" />
+              <button className="bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-black/5 transition-colors">
+                <CalendarBlank className="size-4 text-muted-foreground" />
                 <span className="font-medium text-foreground text-sm leading-5">
-                  {lead ? lead.name : "Lead"}
+                  {targetDate
+                    ? `Due: ${format(targetDate, "dd/MM/yyyy")}`
+                    : "Due Date"}
                 </span>
               </button>
             }
@@ -379,92 +330,10 @@ export function StepQuickCreate({
                   "bg-background hover:bg-black/5",
                 )}
               >
-                <Wrapper>
-                  <g
-                    clipPath="url(#clip0_13_2475)"
-                    id="Icon / Loader"
-                  >
-                  <Spinner className="size-4 text-muted-foreground" />
-                  </g>
-                  <defs>
-                    <clipPath id="clip0_13_2475">
-                      <rect
-                        fill="white"
-                        height="16"
-                        width="16"
-                      />
-                    </clipPath>
-                  </defs>
-                </Wrapper>
-                {status.id !== "backlog" && (
-                  <div className={cn("size-2 rounded-full", (status as any).dotClass)} />
-                )}
+                <Spinner className="size-4 text-muted-foreground" />
+                <div className={cn("size-2 rounded-full", status.dotClass)} />
                 <span className="font-medium text-foreground text-sm leading-5">
                   {status.label}
-                </span>
-              </button>
-            }
-          />
-
-          {/* Sprint Type Picker */}
-          <GenericPicker
-            items={SPRINT_TYPES}
-            onSelect={setSprintType}
-            selectedId={sprintType?.id}
-            placeholder="Select sprint type..."
-            renderItem={(item, isSelected) => (
-              <div className="flex items-center gap-2 w-full">
-                <span className="flex-1">{item.label}</span>
-                {isSelected && <Check className="size-4" />}
-              </div>
-            )}
-            trigger={
-              <button className="bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-black/5 transition-colors">
-                <List className="size-4 text-muted-foreground" />
-                <span className="font-medium text-foreground text-sm leading-5">
-                  {sprintType
-                    ? sprintType.label
-                    : "Sprint Type"}
-                </span>
-              </button>
-            }
-          />
-
-          {/* Target Date Picker */}
-          <DatePicker
-            date={targetDate}
-            onSelect={setTargetDate}
-            trigger={
-              <button className="bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-black/5 transition-colors">
-                <CalendarBlank className="size-4 text-muted-foreground" />
-                <span className="font-medium text-foreground text-sm leading-5">
-                  {targetDate
-                    ? format(targetDate, "dd/MM/yyyy")
-                    : "Target"}
-                </span>
-              </button>
-            }
-          />
-
-          {/* Workstreams Picker */}
-          <GenericPicker
-            items={WORKSTREAMS}
-            onSelect={setWorkstream}
-            selectedId={workstream?.id}
-            placeholder="Select workstream..."
-            renderItem={(item, isSelected) => (
-              <div className="flex items-center gap-2 w-full">
-                <span className="flex-1">{item.label}</span>
-                {isSelected && <Check className="size-4" />}
-              </div>
-            )}
-            trigger={
-              <button className="bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-black/5 transition-colors">
-                <Rows className="size-4 text-muted-foreground" />
-                <span className="font-medium text-foreground text-sm leading-5">
-                  {workstream
-                    ? workstream.label
-                    : "Workstreams"}
                 </span>
               </button>
             }
@@ -492,6 +361,50 @@ export function StepQuickCreate({
             }
           />
 
+          {/* Project Type Picker */}
+          <GenericPicker
+            items={PROJECT_TYPES}
+            onSelect={setProjectType}
+            selectedId={projectType?.id}
+            placeholder="Select type..."
+            renderItem={(item, isSelected) => (
+              <div className="flex items-center gap-2 w-full">
+                <span className="flex-1">{item.label}</span>
+                {isSelected && <Check className="size-4" />}
+              </div>
+            )}
+            trigger={
+              <button className="bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-black/5 transition-colors">
+                <List className="size-4 text-muted-foreground" />
+                <span className="font-medium text-foreground text-sm leading-5">
+                  {projectType ? projectType.label : "Type"}
+                </span>
+              </button>
+            }
+          />
+
+          {/* Project Group Picker */}
+          <GenericPicker
+            items={PROJECT_GROUPS}
+            onSelect={setProjectGroup}
+            selectedId={projectGroup?.id}
+            placeholder="Select group..."
+            renderItem={(item, isSelected) => (
+              <div className="flex items-center gap-2 w-full">
+                <span className="flex-1">{item.label}</span>
+                {isSelected && <Check className="size-4" />}
+              </div>
+            )}
+            trigger={
+              <button className="bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-black/5 transition-colors">
+                <Rows className="size-4 text-muted-foreground" />
+                <span className="font-medium text-foreground text-sm leading-5">
+                  {projectGroup ? projectGroup.label : "Group"}
+                </span>
+              </button>
+            }
+          />
+
           {/* Tag Picker */}
           <GenericPicker
             items={TAGS}
@@ -510,23 +423,7 @@ export function StepQuickCreate({
             )}
             trigger={
               <button className="bg-background flex gap-2 h-9 items-center px-3 py-2 rounded-lg border border-border hover:bg-black/5 transition-colors">
-                <Wrapper>
-                  <g
-                    clipPath="url(#clip0_13_2458)"
-                    id="Icon / Tag"
-                  >
-                    <Tag className="size-4 text-muted-foreground" />
-                  </g>
-                  <defs>
-                    <clipPath id="clip0_13_2458">
-                      <rect
-                        fill="white"
-                        height="16"
-                        width="16"
-                      />
-                    </clipPath>
-                  </defs>
-                </Wrapper>
+                <Tag className="size-4 text-muted-foreground" />
                 <span className="font-medium text-foreground text-sm leading-5">
                   {selectedTag ? selectedTag.label : "Tag"}
                 </span>
@@ -547,8 +444,9 @@ export function StepQuickCreate({
           </div>
 
           <button
-            onClick={onCreate}
-            className="bg-primary hover:bg-primary/90 flex gap-3 h-10 items-center justify-center px-4 py-2 rounded-lg transition-colors cursor-pointer"
+            onClick={handleCreate}
+            disabled={!title.trim() || !selectedClient}
+            className="bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex gap-3 h-10 items-center justify-center px-4 py-2 rounded-lg transition-colors cursor-pointer"
           >
             <span className="font-medium text-primary-foreground text-sm leading-5">
               Create Project

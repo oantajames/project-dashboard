@@ -1,12 +1,11 @@
 "use client"
 
-import type { Project } from "@/lib/data/projects"
-import { ProjectCard } from "@/components/project-card"
+import { ProjectCard, type DisplayProject } from "@/components/project-card"
 import { Plus, FolderOpen } from "@phosphor-icons/react/dist/ssr"
 import { Skeleton } from "@/components/ui/skeleton"
 
 type ProjectCardsViewProps = {
-  projects: Project[]
+  projects: DisplayProject[]
   loading?: boolean
   onCreateProject?: () => void
 }

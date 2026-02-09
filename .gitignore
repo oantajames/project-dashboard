@@ -30,3 +30,10 @@ next-env.d.ts
 # windsurf fules
 .windsurf/
 *.code-workspace
+
+# Auto Claude data directory
+.auto-claude/
+
+# IDE / tooling
+.cursor/
+.claude_settings.json

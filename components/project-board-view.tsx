@@ -1,14 +1,14 @@
 "use client"
 
 import React, { useEffect, useMemo, useState } from "react"
-import type { Project } from "@/lib/data/projects"
-import { ProjectCard } from "@/components/project-card"
+import type { ProjectStatus } from "@/lib/types"
+import { ProjectCard, type DisplayProject } from "@/components/project-card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Button } from "@/components/ui/button"
 import { DotsThreeVertical, Plus, StackSimple, Spinner, CircleNotch, CheckCircle } from "@phosphor-icons/react/dist/ssr"
 
-function columnStatusIcon(status: Project["status"]): React.JSX.Element {
+function columnStatusIcon(status: ProjectStatus): React.JSX.Element {
   switch (status) {
     case "backlog":
       return <StackSimple className="h-4 w-4 text-muted-foreground" />
@@ -24,14 +24,14 @@ function columnStatusIcon(status: Project["status"]): React.JSX.Element {
 }
 
 type ProjectBoardViewProps = {
-  projects: Project[]
+  projects: DisplayProject[]
   loading?: boolean
   onAddProject?: () => void
 }
 
-const COLUMN_ORDER: Array<Project["status"]> = ["backlog", "planned", "active", "completed"]
+const COLUMN_ORDER: Array<ProjectStatus> = ["backlog", "planned", "active", "completed"]
 
-function columnStatusLabel(status: Project["status"]): string {
+function columnStatusLabel(status: ProjectStatus): string {
   switch (status) {
     case "backlog":
       return "Backlog"
@@ -49,7 +49,7 @@ function columnStatusLabel(status: Project["status"]): string {
 }
 
 export function ProjectBoardView({ projects, loading = false, onAddProject }: ProjectBoardViewProps) {
-  const [items, setItems] = useState<Project[]>(projects)
+  const [items, setItems] = useState<DisplayProject[]>(projects)
   const [draggingId, setDraggingId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -57,13 +57,13 @@ export function ProjectBoardView({ projects, loading = false, onAddProject }: Pr
   }, [projects])
 
   const groups = useMemo(() => {
-    const m = new Map<Project["status"], Project[]>()
+    const m = new Map<ProjectStatus, DisplayProject[]>()
     for (const s of COLUMN_ORDER) m.set(s, [])
     for (const p of items) m.get(p.status)!.push(p)
     return m
   }, [items])
 
-  const onDropTo = (status: Project["status"]) => (e: React.DragEvent<HTMLDivElement>) => {
+  const onDropTo = (status: ProjectStatus) => (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
     const id = e.dataTransfer.getData("text/id")
     if (!id) return
@@ -75,7 +75,7 @@ export function ProjectBoardView({ projects, loading = false, onAddProject }: Pr
     e.preventDefault()
   }
 
-  const draggableCard = (p: Project) => (
+  const draggableCard = (p: DisplayProject) => (
     <div
       key={p.id}
       draggable

@@ -1,5 +1,5 @@
 import { AppSidebar } from "@/components/app-sidebar"
-import { ProjectDetailsPage } from "@/components/projects/ProjectDetailsPage"
+import { ClientDetailsPage } from "@/components/clients/ClientDetailsPage"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 
 type PageProps = {
@@ -12,7 +12,7 @@ export default async function Page({ params }: PageProps) {
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
-        <ProjectDetailsPage projectId={id} />
+        <ClientDetailsPage clientId={id} />
       </SidebarInset>
     </SidebarProvider>
   )

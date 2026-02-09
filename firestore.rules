@@ -1,0 +1,11 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Development rules - allow authenticated users full access
+    // IMPORTANT: Replace with stricter rules before production!
+
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

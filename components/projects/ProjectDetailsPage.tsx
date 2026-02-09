@@ -1,12 +1,13 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { LinkSimple, SquareHalf } from "@phosphor-icons/react/dist/ssr"
 import { toast } from "sonner"
 import { AnimatePresence, motion } from "motion/react"
 
-import type { ProjectDetails } from "@/lib/data/project-details"
-import { getProjectDetailsById } from "@/lib/data/project-details"
+import { useProjectDetails } from "@/hooks/useProjectDetails"
+import { adaptToLegacyProjectDetails } from "@/lib/adapters/project-details-adapter"
+import type { ProjectDetails as LegacyProjectDetails } from "@/lib/data/project-details"
 import { Breadcrumbs } from "@/components/projects/Breadcrumbs"
 import { ProjectHeader } from "@/components/projects/ProjectHeader"
 import { ScopeColumns } from "@/components/projects/ScopeColumns"
@@ -15,7 +16,8 @@ import { KeyFeaturesColumns } from "@/components/projects/KeyFeaturesColumns"
 import { TimelineGantt } from "@/components/projects/TimelineGantt"
 import { RightMetaPanel } from "@/components/projects/RightMetaPanel"
 import { WorkstreamTab } from "@/components/projects/WorkstreamTab"
-import { ProjectWizard } from "@/components/project-wizard/ProjectWizard"
+import { ProjectEditDialog } from "@/components/projects/ProjectEditDialog"
+import { ProjectIntakeBrief } from "@/components/projects/ProjectIntakeBrief"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -26,31 +28,25 @@ type ProjectDetailsPageProps = {
   projectId: string
 }
 
-type LoadState =
-  | { status: "loading" }
-  | { status: "ready"; project: ProjectDetails }
-
 export function ProjectDetailsPage({ projectId }: ProjectDetailsPageProps) {
-  const [state, setState] = useState<LoadState>({ status: "loading" })
+  const { details, loading, error } = useProjectDetails(projectId)
   const [showMeta, setShowMeta] = useState(true)
-  const [isWizardOpen, setIsWizardOpen] = useState(false)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
 
-  useEffect(() => {
-    let cancelled = false
-    setState({ status: "loading" })
+  // Adapt Firebase data to legacy format for child components
+  const project: LegacyProjectDetails | null = useMemo(() => {
+    if (!details.project) return null
 
-    const delay = 600 + Math.floor(Math.random() * 301)
-    const t = setTimeout(() => {
-      if (cancelled) return
-      const project = getProjectDetailsById(projectId)
-      setState({ status: "ready", project })
-    }, delay)
-
-    return () => {
-      cancelled = true
-      clearTimeout(t)
-    }
-  }, [projectId])
+    return adaptToLegacyProjectDetails({
+      project: details.project,
+      tasks: details.tasks,
+      workstreams: details.workstreams,
+      files: details.files,
+      picUsers: details.picUsers,
+      supportUsers: details.supportUsers,
+      clientName: details.client?.companyName,
+    })
+  }, [details])
 
   const copyLink = useCallback(async () => {
     if (!navigator.clipboard) {
@@ -69,24 +65,18 @@ export function ProjectDetailsPage({ projectId }: ProjectDetailsPageProps) {
   const breadcrumbs = useMemo(
     () => [
       { label: "Projects", href: "/" },
-      { label: state.status === "ready" ? state.project.name : "Project Details" },
+      { label: project?.name ?? "Project Details" },
     ],
-    [state.status, state.status === "ready" ? state.project.name : null]
+    [project?.name]
   )
 
-  const openWizard = useCallback(() => {
-    setIsWizardOpen(true)
+  const openEditDialog = useCallback(() => {
+    setIsEditDialogOpen(true)
   }, [])
 
-  const closeWizard = useCallback(() => {
-    setIsWizardOpen(false)
-  }, [])
-
-  if (state.status === "loading") {
+  if (loading || !project) {
     return <ProjectDetailsSkeleton />
   }
-
-  const project = state.project
 
   return (
     <div className="flex flex-1 flex-col min-w-0 m-2 border border-border rounded-lg">
@@ -115,123 +105,129 @@ export function ProjectDetailsPage({ projectId }: ProjectDetailsPageProps) {
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col bg-background px-2 my-0 rounded-b-lg min-w-0 border-t">
-        <div className="px-4">
-          <div className="mx-auto w-full max-w-7xl">
+      <div className="flex flex-1 flex-col bg-background rounded-b-lg min-w-0 border-t overflow-hidden">
+        <div
+          className={
+            "flex-1 grid grid-cols-1 min-w-0 " +
+            (showMeta
+              ? "lg:grid-cols-[minmax(0,1fr)_300px]"
+              : "lg:grid-cols-1")
+          }
+        >
+          {/* Main content column */}
+          <div className="min-w-0 overflow-y-auto px-6 pt-4 pb-8 space-y-6">
+            <ProjectHeader project={project} onEditProject={openEditDialog} />
 
-          <div
-            className={
-              "mt-0 grid grid-cols-1 gap-15 " +
-              (showMeta
-                ? "lg:grid-cols-[minmax(0,2fr)_minmax(0,320px)]"
-                : "lg:grid-cols-[minmax(0,1fr)_minmax(0,0px)]")
-            }
-          >
-            <div className="space-y-6 pt-4">
-              <ProjectHeader project={project} onEditProject={openWizard} />
+            <Tabs defaultValue="overview">
+              <TabsList className="w-full gap-4 overflow-x-auto">
+                <TabsTrigger value="overview">Overview</TabsTrigger>
+                <TabsTrigger value="brief">Brief</TabsTrigger>
+                <TabsTrigger value="workstream">Workstream</TabsTrigger>
+                <TabsTrigger value="tasks">Tasks</TabsTrigger>
+                <TabsTrigger value="notes">Notes</TabsTrigger>
+                <TabsTrigger value="assets">Assets &amp; Files</TabsTrigger>
+              </TabsList>
 
-              <Tabs defaultValue="overview">
-                <TabsList className="w-full gap-6">
-                  <TabsTrigger value="overview">Overview</TabsTrigger>
-                  <TabsTrigger value="workstream">Workstream</TabsTrigger>
-                  <TabsTrigger value="tasks">Tasks</TabsTrigger>
-                  <TabsTrigger value="notes">Notes</TabsTrigger>
-                  <TabsTrigger value="assets">Assets &amp; Files</TabsTrigger>
-                </TabsList>
+              <TabsContent value="overview">
+                <div className="space-y-10">
+                  <p className="text-sm leading-6 text-muted-foreground">{project.description}</p>
+                  <ScopeColumns scope={project.scope} />
+                  <OutcomesList outcomes={project.outcomes} />
+                  <KeyFeaturesColumns features={project.keyFeatures} />
+                  <TimelineGantt tasks={project.timelineTasks} />
+                </div>
+              </TabsContent>
 
-                <TabsContent value="overview">
-                  <div className="space-y-10">
-                    <p className="text-sm leading-6 text-muted-foreground">{project.description}</p>
-                    <ScopeColumns scope={project.scope} />
-                    <OutcomesList outcomes={project.outcomes} />
-                    <KeyFeaturesColumns features={project.keyFeatures} />
-                    <TimelineGantt tasks={project.timelineTasks} />
-                  </div>
-                </TabsContent>
+              <TabsContent value="brief">
+                {details.project && (
+                  <ProjectIntakeBrief project={details.project} />
+                )}
+              </TabsContent>
 
-                <TabsContent value="workstream">
-                  <WorkstreamTab workstreams={project.workstreams} />
-                </TabsContent>
+              <TabsContent value="workstream">
+                <WorkstreamTab workstreams={project.workstreams} />
+              </TabsContent>
 
-                <TabsContent value="tasks">
-                  <div className="rounded-lg border border-dashed border-border/70 bg-muted/30 px-4 py-10 text-center text-sm text-muted-foreground">
-                    Tasks view is upcoming.
-                  </div>
-                </TabsContent>
+              <TabsContent value="tasks">
+                <div className="rounded-lg border border-dashed border-border/70 bg-muted/30 px-4 py-10 text-center text-sm text-muted-foreground">
+                  Tasks view is upcoming.
+                </div>
+              </TabsContent>
 
-                <TabsContent value="notes">
-                  <div className="rounded-lg border border-dashed border-border/70 bg-muted/30 px-4 py-10 text-center text-sm text-muted-foreground">
-                    Notes are upcoming.
-                  </div>
-                </TabsContent>
+              <TabsContent value="notes">
+                <div className="rounded-lg border border-dashed border-border/70 bg-muted/30 px-4 py-10 text-center text-sm text-muted-foreground">
+                  Notes are upcoming.
+                </div>
+              </TabsContent>
 
-                <TabsContent value="assets">
-                  <div className="rounded-lg border border-dashed border-border/70 bg-muted/30 px-4 py-10 text-center text-sm text-muted-foreground">
-                    Assets &amp; Files section is upcoming.
-                  </div>
-                </TabsContent>
-              </Tabs>
-            </div>
-
-            <AnimatePresence initial={false}>
-              {showMeta && (
-                <motion.div
-                  key="meta-panel"
-                  initial={{ x: 80, opacity: 0 }}
-                  animate={{ x: 0, opacity: 1 }}
-                  exit={{ x: 80, opacity: 0 }}
-                  transition={{ type: "spring", stiffness: 260, damping: 26 }}
-                  className="lg:border-l lg:border-border lg:pl-6"
-                >
-                  <RightMetaPanel project={project} />
-                </motion.div>
-              )}
-            </AnimatePresence>
+              <TabsContent value="assets">
+                <div className="rounded-lg border border-dashed border-border/70 bg-muted/30 px-4 py-10 text-center text-sm text-muted-foreground">
+                  Assets &amp; Files section is upcoming.
+                </div>
+              </TabsContent>
+            </Tabs>
           </div>
+
+          {/* Right meta panel */}
+          <AnimatePresence initial={false}>
+            {showMeta && (
+              <motion.div
+                key="meta-panel"
+                initial={{ x: 80, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: 80, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 260, damping: 26 }}
+                className="hidden lg:block border-l border-border overflow-y-auto px-5 pt-4 pb-8"
+              >
+                <RightMetaPanel project={project} />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 
       <Separator className="mt-auto" />
 
-      {isWizardOpen && (
-        <ProjectWizard onClose={closeWizard} onCreate={closeWizard} />
+      {details.project && (
+        <ProjectEditDialog
+          project={details.project}
+          open={isEditDialogOpen}
+          onOpenChange={setIsEditDialogOpen}
+        />
       )}
-    </div>
     </div>
   )
 }
 
 function ProjectDetailsSkeleton() {
   return (
-    <div className="flex flex-1 flex-col bg-background mx-2 my-2 border border-border rounded-lg min-w-0">
-      <div className="p-6">
+    <div className="flex flex-1 flex-col bg-background m-2 border border-border rounded-lg min-w-0">
+      <div className="px-6 py-4">
         <div className="flex items-center gap-2">
           <Skeleton className="h-4 w-24" />
           <Skeleton className="h-4 w-4" />
           <Skeleton className="h-4 w-48" />
         </div>
+      </div>
 
-        <div className="mt-4">
-          <Skeleton className="h-4 w-32" />
-          <Skeleton className="mt-3 h-8 w-[360px]" />
-          <Skeleton className="mt-3 h-5 w-[520px]" />
-          <Skeleton className="mt-5 h-px w-full" />
-          <Skeleton className="mt-5 h-16 w-full" />
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_300px] border-t min-w-0">
+        <div className="px-6 pt-4 pb-8 space-y-8">
+          <div>
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="mt-3 h-8 w-full max-w-sm" />
+            <Skeleton className="mt-3 h-5 w-full max-w-lg" />
+            <Skeleton className="mt-5 h-px w-full" />
+            <Skeleton className="mt-5 h-16 w-full" />
+          </div>
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-28 w-full" />
+          <Skeleton className="h-64 w-full" />
         </div>
 
-        <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-[1fr_320px]">
-          <div className="space-y-8">
-            <Skeleton className="h-32 w-full" />
-            <Skeleton className="h-28 w-full" />
-            <Skeleton className="h-28 w-full" />
-            <Skeleton className="h-64 w-full" />
-          </div>
-
-          <div className="space-y-4">
-            <Skeleton className="h-40 w-full" />
-            <Skeleton className="h-52 w-full" />
-            <Skeleton className="h-64 w-full" />
-          </div>
+        <div className="hidden lg:block border-l px-5 pt-4 pb-8 space-y-4">
+          <Skeleton className="h-40 w-full" />
+          <Skeleton className="h-52 w-full" />
+          <Skeleton className="h-64 w-full" />
         </div>
       </div>
     </div>

@@ -7,14 +7,21 @@ import { ProjectTimeline } from "@/components/project-timeline"
 import { ProjectCardsView } from "@/components/project-cards-view"
 import { ProjectBoardView } from "@/components/project-board-view"
 import { ProjectWizard } from "@/components/project-wizard/ProjectWizard"
-import { computeFilterCounts, projects } from "@/lib/data/projects"
+import { useProjects } from "@/hooks/useProjects"
+import { useClients } from "@/hooks/useClients"
+import { computeFilterCounts } from "@/lib/utils/project-filters"
 import { DEFAULT_VIEW_OPTIONS, type FilterChip, type ViewOptions } from "@/lib/view-options"
 import { chipsToParams, paramsToChips } from "@/lib/url/filters"
+import type { DisplayProject } from "@/components/project-card"
 
 export function ProjectsContent() {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
+
+  // Firebase data
+  const { projects, loading: projectsLoading } = useProjects()
+  const { clients } = useClients()
 
   const [viewOptions, setViewOptions] = useState<ViewOptions>(DEFAULT_VIEW_OPTIONS)
 
@@ -75,8 +82,33 @@ export function ProjectsContent() {
     prevParamsRef.current = qs
     router.replace(url, { scroll: false })
   }
-  const filteredProjects = useMemo(() => {
-    let list = projects.slice()
+  // Create a map of client IDs to client names for quick lookup
+  const clientNameMap = useMemo(() => {
+    const map = new Map<string, string>()
+    clients.forEach((c) => map.set(c.id, c.companyName))
+    return map
+  }, [clients])
+
+  // Compute duration label from start/end dates
+  const computeDurationLabel = (startDate?: Date, endDate?: Date): string => {
+    if (!startDate || !endDate) return ""
+    const diffDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
+    if (diffDays < 7) return `${diffDays} days`
+    if (diffDays < 30) {
+      const weeks = Math.ceil(diffDays / 7)
+      return `${weeks} week${weeks > 1 ? "s" : ""}`
+    }
+    const months = Math.ceil(diffDays / 30)
+    return `${months} month${months > 1 ? "s" : ""}`
+  }
+
+  const filteredProjects = useMemo((): DisplayProject[] => {
+    // Enrich projects with display fields
+    let list: DisplayProject[] = projects.map((p) => ({
+      ...p,
+      clientName: clientNameMap.get(p.clientId) || undefined,
+      durationLabel: computeDurationLabel(p.startDate, p.endDate),
+    }))
 
     // Apply showClosedProjects toggle
     if (!viewOptions.showClosedProjects) {
@@ -103,7 +135,7 @@ export function ProjectsContent() {
     if (tagSet.size) list = list.filter((p) => p.tags.some((t) => tagSet.has(t.toLowerCase())))
     if (memberSet.size) {
       const members = Array.from(memberSet)
-      list = list.filter((p) => p.members.some((m) => members.some((mv) => m.toLowerCase().includes(mv))))
+      list = list.filter((p) => p.picUserIds.some((m) => members.some((mv) => m.toLowerCase().includes(mv))))
     }
 
     // Ordering
@@ -111,7 +143,17 @@ export function ProjectsContent() {
     if (viewOptions.ordering === "alphabetical") sorted.sort((a, b) => a.name.localeCompare(b.name))
     if (viewOptions.ordering === "date") sorted.sort((a, b) => (a.endDate?.getTime() || 0) - (b.endDate?.getTime() || 0))
     return sorted
-  }, [filters, viewOptions, projects])
+  }, [filters, viewOptions, projects, clientNameMap])
+
+  if (projectsLoading) {
+    return (
+      <div className="flex flex-1 flex-col bg-background mx-2 my-2 border border-border rounded-lg min-w-0">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-muted-foreground">Loading projects...</div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-1 flex-col bg-background mx-2 my-2 border border-border rounded-lg min-w-0">
@@ -119,7 +161,7 @@ export function ProjectsContent() {
         filters={filters}
         onRemoveFilter={removeFilter}
         onFiltersChange={applyFilters}
-        counts={computeFilterCounts(filteredProjects)}
+        counts={computeFilterCounts(projects)}
         viewOptions={viewOptions}
         onViewOptionsChange={setViewOptions}
         onAddProject={openWizard}

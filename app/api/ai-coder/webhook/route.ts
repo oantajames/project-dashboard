@@ -1,0 +1,204 @@
+/**
+ * AI Coder — Webhook Route
+ *
+ * POST /api/ai-coder/webhook
+ *
+ * Receives webhooks from GitHub for:
+ * - PR status changes (opened, merged, closed)
+ * - Check run completions (CI pass/fail)
+ * - Deployment status updates
+ *
+ * Updates the corresponding Firestore document so the chat UI
+ * can pick up changes in real-time via onSnapshot.
+ */
+
+import { createHmac } from "crypto"
+import { initializeApp, getApps, cert } from "firebase-admin/app"
+import { getFirestore } from "firebase-admin/firestore"
+
+// ── Firebase Admin ──
+
+function getAdminFirestore() {
+  let app
+  if (getApps().length > 0) {
+    app = getApps()[0]
+  } else {
+    const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_KEY
+      ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY)
+      : undefined
+
+    app = initializeApp(
+      serviceAccount
+        ? { credential: cert(serviceAccount), projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID }
+        : { projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID }
+    )
+  }
+  return getFirestore(app)
+}
+
+// ── Webhook Verification ──
+
+function verifyGitHubWebhook(payload: string, signature: string): boolean {
+  const secret = process.env.GITHUB_WEBHOOK_SECRET
+  if (!secret) {
+    console.warn("GITHUB_WEBHOOK_SECRET not set — skipping webhook verification")
+    return true
+  }
+
+  const expectedSignature =
+    "sha256=" + createHmac("sha256", secret).update(payload).digest("hex")
+
+  return signature === expectedSignature
+}
+
+// ── Route Handler ──
+
+export async function POST(req: Request) {
+  const payloadText = await req.text()
+
+  // Verify webhook signature
+  const signature = req.headers.get("x-hub-signature-256") || ""
+  if (!verifyGitHubWebhook(payloadText, signature)) {
+    return new Response("Invalid signature", { status: 401 })
+  }
+
+  const event = req.headers.get("x-github-event")
+  const payload = JSON.parse(payloadText)
+
+  try {
+    switch (event) {
+      case "pull_request":
+        await handlePullRequestEvent(payload)
+        break
+
+      case "check_run":
+        await handleCheckRunEvent(payload)
+        break
+
+      case "deployment_status":
+        await handleDeploymentStatus(payload)
+        break
+
+      default:
+        // Ignore unhandled events
+        break
+    }
+
+    return new Response("OK", { status: 200 })
+  } catch (error) {
+    console.error("Webhook processing error:", error)
+    return new Response("Internal error", { status: 500 })
+  }
+}
+
+// ── Event Handlers ──
+
+/**
+ * Handles pull_request events (opened, closed, merged).
+ * Updates the Firestore request document matching this PR.
+ */
+async function handlePullRequestEvent(payload: {
+  action: string
+  pull_request: { number: number; merged: boolean; html_url: string }
+}) {
+  const { action, pull_request } = payload
+  const db = getAdminFirestore()
+
+  // Find the request document by PR number
+  const snapshot = await db
+    .collection("aiCoderRequests")
+    .where("prNumber", "==", pull_request.number)
+    .limit(1)
+    .get()
+
+  if (snapshot.empty) return
+
+  const docRef = snapshot.docs[0].ref
+  const update: Record<string, unknown> = {
+    updatedAt: new Date(),
+  }
+
+  if (action === "closed" && pull_request.merged) {
+    update.status = "complete"
+  } else if (action === "closed") {
+    update.status = "failed"
+    update.error = "PR was closed without merging"
+  }
+
+  await docRef.update(update)
+}
+
+/**
+ * Handles check_run events (completed).
+ * Updates CI status on the Firestore request document.
+ */
+async function handleCheckRunEvent(payload: {
+  action: string
+  check_run: {
+    conclusion: string | null
+    pull_requests: Array<{ number: number }>
+  }
+}) {
+  const { action, check_run } = payload
+  if (action !== "completed" || !check_run.pull_requests.length) return
+
+  const db = getAdminFirestore()
+  const prNumber = check_run.pull_requests[0].number
+
+  const snapshot = await db
+    .collection("aiCoderRequests")
+    .where("prNumber", "==", prNumber)
+    .limit(1)
+    .get()
+
+  if (snapshot.empty) return
+
+  const docRef = snapshot.docs[0].ref
+  await docRef.update({
+    checksStatus: check_run.conclusion || "pending",
+    updatedAt: new Date(),
+  })
+}
+
+/**
+ * Handles deployment_status events (Vercel preview deploys).
+ * Updates the preview URL on the Firestore request document.
+ */
+async function handleDeploymentStatus(payload: {
+  deployment_status: {
+    state: string
+    environment_url?: string
+    target_url?: string
+  }
+  deployment: {
+    sha: string
+  }
+}) {
+  const { deployment_status } = payload
+  if (deployment_status.state !== "success") return
+
+  const previewUrl =
+    deployment_status.environment_url || deployment_status.target_url
+  if (!previewUrl) return
+
+  const db = getAdminFirestore()
+
+  // Find request by deployment SHA — this is a best-effort match
+  // since we store the commitSha from the sandbox
+  const snapshot = await db
+    .collection("aiCoderRequests")
+    .where("status", "==", "creating_pr")
+    .orderBy("createdAt", "desc")
+    .limit(5)
+    .get()
+
+  if (snapshot.empty) return
+
+  // Update the most recent matching request with the preview URL
+  const docRef = snapshot.docs[0].ref
+  await docRef.update({
+    previewUrl,
+    status: "deploying",
+    updatedAt: new Date(),
+  })
+}

@@ -102,7 +102,7 @@ export function StepMode({ selected, onSelect, onCancel, onContinue, onClose }: 
               )}
             </ProjectCard>
 
-            {/* Guided Setup Card */}
+            {/* Full Brief Card */}
             <ProjectCard onClick={() => onSelect('guided')} isSelected={selected === 'guided'}>
               <div className="content-stretch flex items-center p-3 relative rounded-[16px] shrink-0">
                 <div aria-hidden="true" className="absolute border border-border border-solid inset-0 pointer-events-none rounded-[16px]" />
@@ -111,7 +111,7 @@ export function StepMode({ selected, onSelect, onCancel, onContinue, onClose }: 
               <div className="content-stretch flex flex-col items-start relative shrink-0 w-full">
                 <div className="content-stretch flex items-center relative shrink-0 w-full" data-name="Card / Header">
                   <div className="basis-0 content-stretch flex grow items-start min-h-px min-w-px relative shrink-0">
-                    <Helper text="Guided Setup" text1="Define Goal, ownership, and structure" />
+                    <Helper text="Full Brief" text1="Complete intake questionnaire" />
                   </div>
                 </div>
               </div>

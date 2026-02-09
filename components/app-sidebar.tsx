@@ -1,5 +1,7 @@
 "use client"
 
+import Link from "next/link"
+import { usePathname } from "next/navigation"
 import {
   Sidebar,
   SidebarContent,
@@ -18,25 +20,36 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { ProgressCircle } from "@/components/progress-circle"
 import {
   MagnifyingGlass,
-  Tray,
-  CheckSquare,
+  House,
   Folder,
   Users,
-  ChartBar,
+  Receipt,
+  FileText,
   Gear,
   Layout,
   Question,
   CaretRight,
   CaretUpDown,
+  SignOut,
 } from "@phosphor-icons/react/dist/ssr"
 import { activeProjects, footerItems, navItems, type NavItemId, type SidebarFooterItemId } from "@/lib/data/sidebar"
+import { useAuth } from "@/contexts/AuthContext"
+import { useProjects } from "@/hooks/useProjects"
 
 const navItemIcons: Record<NavItemId, React.ComponentType<{ className?: string }>> = {
-  inbox: Tray,
-  "my-tasks": CheckSquare,
+  dashboard: House,
   projects: Folder,
   clients: Users,
-  performance: ChartBar,
+  invoices: Receipt,
+  contracts: FileText,
+}
+
+const navItemPaths: Record<NavItemId, string> = {
+  dashboard: "/",
+  projects: "/projects",
+  clients: "/clients",
+  invoices: "/invoices",
+  contracts: "/contracts",
 }
 
 const footerItemIcons: Record<SidebarFooterItemId, React.ComponentType<{ className?: string }>> = {
@@ -46,6 +59,43 @@ const footerItemIcons: Record<SidebarFooterItemId, React.ComponentType<{ classNa
 }
 
 export function AppSidebar() {
+  const pathname = usePathname()
+  const { user, signOut } = useAuth()
+  const { projects } = useProjects()
+
+  // Get active projects (in progress)
+  const activeProjectsList = projects
+    .filter((p) => p.status === "active")
+    .slice(0, 4)
+    .map((p, index) => ({
+      id: p.id,
+      name: p.name,
+      color: `var(--chart-${(index % 5) + 1})`,
+      progress: p.progress,
+    }))
+
+  // Filter nav items based on user role
+  const visibleNavItems = navItems.filter((item) => {
+    // Clients is only visible to owners
+    if (item.id === "clients" && user?.role !== "owner") {
+      return false
+    }
+    return true
+  })
+
+  const getInitials = (name: string) => {
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2)
+  }
+
+  const handleSignOut = async () => {
+    await signOut()
+  }
+
   return (
     <Sidebar className="border-border/40 border-r-0 shadow-none border-none">
       <SidebarHeader className="p-4">
@@ -55,8 +105,12 @@ export function AppSidebar() {
               <img src="/logo-wrapper.png" alt="Logo" className="h-4 w-4" />
             </div>
             <div className="flex flex-col">
-              <span className="text-sm font-semibold">Workspace</span>
-              <span className="text-xs text-muted-foreground">Pro plan</span>
+              <span className="text-sm font-semibold">
+                {user?.role === "owner" ? "Dashboard" : "Client Portal"}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {user?.role === "owner" ? "Owner" : "Client"}
+              </span>
             </div>
           </div>
           <button className="rounded-md p-1 hover:bg-accent">
@@ -82,81 +136,98 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map((item) => (
-                <SidebarMenuItem key={item.label}>
-                  {(() => {
-                    const Icon = navItemIcons[item.id]
-                    return null
-                  })()}
-                  <SidebarMenuButton
-                    isActive={item.isActive}
-                    className="h-9 rounded-lg px-3 font-normal text-muted-foreground"
-                  >
-                    {(() => {
-                      const Icon = navItemIcons[item.id]
-                      return Icon ? <Icon className="h-[18px] w-[18px]" /> : null
-                    })()}
-                    <span>{item.label}</span>
-                  </SidebarMenuButton>
-                  {item.badge && (
-                    <SidebarMenuBadge className="bg-muted text-muted-foreground rounded-full px-2">
-                      {item.badge}
-                    </SidebarMenuBadge>
-                  )}
-                </SidebarMenuItem>
-              ))}
+              {visibleNavItems.map((item) => {
+                const Icon = navItemIcons[item.id]
+                const path = navItemPaths[item.id]
+                const isActive = pathname === path || (path !== "/" && pathname.startsWith(path))
+
+                return (
+                  <SidebarMenuItem key={item.label}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActive}
+                      className="h-9 rounded-lg px-3 font-normal text-muted-foreground"
+                    >
+                      <Link href={path}>
+                        {Icon && <Icon className="h-[18px] w-[18px]" />}
+                        <span>{item.label}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                    {item.badge && (
+                      <SidebarMenuBadge className="bg-muted text-muted-foreground rounded-full px-2">
+                        {item.badge}
+                      </SidebarMenuBadge>
+                    )}
+                  </SidebarMenuItem>
+                )
+              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup>
-          <SidebarGroupLabel className="px-3 text-xs font-medium text-muted-foreground">
-            Active Projects
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {activeProjects.map((project) => (
-                <SidebarMenuItem key={project.name}>
-                  <SidebarMenuButton className="h-9 rounded-lg px-3 group">
-                    <ProgressCircle progress={project.progress} color={project.color} size={18} />
-                    <span className="flex-1 truncate text-sm">{project.name}</span>
-                    <span className="opacity-0 group-hover:opacity-100 rounded p-0.5 hover:bg-accent">
-                      <span className="text-muted-foreground text-lg">···</span>
-                    </span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {user?.role === "owner" && activeProjectsList.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="px-3 text-xs font-medium text-muted-foreground">
+              Active Projects
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {activeProjectsList.map((project) => (
+                  <SidebarMenuItem key={project.id}>
+                    <SidebarMenuButton asChild className="h-9 rounded-lg px-3 group">
+                      <Link href={`/projects/${project.id}`}>
+                        <ProgressCircle progress={project.progress} color={project.color} size={18} />
+                        <span className="flex-1 truncate text-sm">{project.name}</span>
+                        <span className="opacity-0 group-hover:opacity-100 rounded p-0.5 hover:bg-accent">
+                          <span className="text-muted-foreground text-lg">···</span>
+                        </span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
       <SidebarFooter className="border-t border-border/40 p-2">
         <SidebarMenu>
-          {footerItems.map((item) => (
-            <SidebarMenuItem key={item.label}>
-              <SidebarMenuButton className="h-9 rounded-lg px-3 text-muted-foreground">
-                {(() => {
-                  const Icon = footerItemIcons[item.id]
-                  return Icon ? <Icon className="h-[18px] w-[18px]" /> : null
-                })()}
-                <span>{item.label}</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
+          {footerItems.map((item) => {
+            const Icon = footerItemIcons[item.id]
+            return (
+              <SidebarMenuItem key={item.label}>
+                <SidebarMenuButton className="h-9 rounded-lg px-3 text-muted-foreground">
+                  {Icon && <Icon className="h-[18px] w-[18px]" />}
+                  <span>{item.label}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            )
+          })}
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              onClick={handleSignOut}
+              className="h-9 rounded-lg px-3 text-muted-foreground hover:text-destructive"
+            >
+              <SignOut className="h-[18px] w-[18px]" />
+              <span>Sign out</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
         </SidebarMenu>
 
-        <div className="mt-2 flex items-center gap-3 rounded-lg p-2 hover:bg-accent cursor-pointer">
-          <Avatar className="h-8 w-8">
-            <AvatarImage src="/avatar-profile.jpg" />
-            <AvatarFallback>JD</AvatarFallback>
-          </Avatar>
-          <div className="flex flex-1 flex-col">
-            <span className="text-sm font-medium">Jason D</span>
-            <span className="text-xs text-muted-foreground">jason.duong@mail.com</span>
+        {user && (
+          <div className="mt-2 flex items-center gap-3 rounded-lg p-2 hover:bg-accent cursor-pointer">
+            <Avatar className="h-8 w-8">
+              <AvatarImage src={user.avatarUrl} />
+              <AvatarFallback>{getInitials(user.displayName)}</AvatarFallback>
+            </Avatar>
+            <div className="flex flex-1 flex-col">
+              <span className="text-sm font-medium">{user.displayName}</span>
+              <span className="text-xs text-muted-foreground">{user.email}</span>
+            </div>
+            <CaretRight className="h-4 w-4 text-muted-foreground" />
           </div>
-          <CaretRight className="h-4 w-4 text-muted-foreground" />
-        </div>
+        )}
       </SidebarFooter>
     </Sidebar>
   )
