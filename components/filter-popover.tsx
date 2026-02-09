@@ -186,14 +186,15 @@ export function FilterPopover({ initialChips, onApply, onClear, counts }: Filter
             {active === "priority" && (
               <div className="grid grid-cols-2 gap-2">
                 {priorityOptions.map((opt) => (
-                  <label key={opt.id} className="flex items-center gap-2 rounded-lg border p-2 hover:bg-accent cursor-pointer">
+                  <label key={opt.id} className="flex items-start gap-2 rounded-lg border p-2 hover:bg-accent cursor-pointer">
                     <Checkbox
                       checked={temp.priority.has(opt.id)}
                       onCheckedChange={() => setTemp((t) => ({ ...t, priority: toggleSet(t.priority, opt.id) }))}
+                      className="mt-0.5"
                     />
-                    <span className="text-sm flex-1">{opt.label}</span>
+                    <span className="text-sm flex-1 break-words">{opt.label}</span>
                     {counts?.priority?.[opt.id] != null && (
-                      <span className="text-xs text-muted-foreground">{counts.priority[opt.id]}</span>
+                      <span className="text-xs text-muted-foreground shrink-0">{counts.priority[opt.id]}</span>
                     )}
                   </label>
                 ))}
@@ -203,15 +204,16 @@ export function FilterPopover({ initialChips, onApply, onClear, counts }: Filter
             {active === "status" && (
               <div className="grid grid-cols-2 gap-2">
                 {statusOptions.map((opt) => (
-                  <label key={opt.id} className="flex items-center gap-2 rounded-lg border p-2 hover:bg-accent cursor-pointer">
-                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: opt.color }} />
+                  <label key={opt.id} className="flex items-start gap-2 rounded-lg border p-2 hover:bg-accent cursor-pointer">
+                    <span className="h-2.5 w-2.5 rounded-full shrink-0 mt-1" style={{ backgroundColor: opt.color }} />
                     <Checkbox
                       checked={temp.status.has(opt.id)}
                       onCheckedChange={() => setTemp((t) => ({ ...t, status: toggleSet(t.status, opt.id) }))}
+                      className="mt-0.5"
                     />
-                    <span className="text-sm flex-1">{opt.label}</span>
+                    <span className="text-sm flex-1 break-words">{opt.label}</span>
                     {counts?.status?.[opt.id] != null && (
-                      <span className="text-xs text-muted-foreground">{counts.status[opt.id]}</span>
+                      <span className="text-xs text-muted-foreground shrink-0">{counts.status[opt.id]}</span>
                     )}
                   </label>
                 ))}
@@ -221,16 +223,17 @@ export function FilterPopover({ initialChips, onApply, onClear, counts }: Filter
             {active === "members" && (
               <div className="space-y-2">
                 {memberOptions.map((m) => (
-                  <label key={m.id} className="flex items-center gap-2 rounded-lg border p-2 hover:bg-accent cursor-pointer">
+                  <label key={m.id} className="flex items-start gap-2 rounded-lg border p-2 hover:bg-accent cursor-pointer">
                     <Checkbox
                       checked={temp.members.has(m.label)}
                       onCheckedChange={() => setTemp((t) => ({ ...t, members: toggleSet(t.members, m.label) }))}
+                      className="mt-0.5"
                     />
-                    <span className="text-sm flex-1">{m.label}</span>
+                    <span className="text-sm flex-1 break-words">{m.label}</span>
                     {counts?.members?.[m.id] != null ? (
-                      <span className="text-xs text-muted-foreground">{counts.members[m.id]}</span>
+                      <span className="text-xs text-muted-foreground shrink-0">{counts.members[m.id]}</span>
                     ) : (
-                      m.hint && <span className="text-xs text-muted-foreground">{m.hint}</span>
+                      m.hint && <span className="text-xs text-muted-foreground shrink-0">{m.hint}</span>
                     )}
                   </label>
                 ))}
@@ -251,14 +254,15 @@ export function FilterPopover({ initialChips, onApply, onClear, counts }: Filter
                   {tagOptions
                     .filter((t) => t.label.toLowerCase().includes(tagSearch.toLowerCase()))
                     .map((t) => (
-                      <label key={t.id} className="flex items-center gap-2 rounded-lg border p-2 hover:bg-accent cursor-pointer">
+                      <label key={t.id} className="flex items-start gap-2 rounded-lg border p-2 hover:bg-accent cursor-pointer">
                         <Checkbox
                           checked={temp.tags.has(t.id)}
                           onCheckedChange={() => setTemp((s) => ({ ...s, tags: toggleSet(s.tags, t.id) }))}
+                          className="mt-0.5"
                         />
-                        <span className="text-sm flex-1">{t.label}</span>
+                        <span className="text-sm flex-1 break-words">{t.label}</span>
                         {counts?.tags?.[t.id] != null && (
-                          <span className="text-xs text-muted-foreground">{counts.tags[t.id]}</span>
+                          <span className="text-xs text-muted-foreground shrink-0">{counts.tags[t.id]}</span>
                         )}
                       </label>
                     ))}

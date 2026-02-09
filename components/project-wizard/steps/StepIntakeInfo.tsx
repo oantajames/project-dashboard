@@ -76,11 +76,11 @@ export function IntakeCheckbox({
     <button
       type="button"
       onClick={() => onChange(!checked)}
-      className="flex items-center gap-2.5 group cursor-pointer"
+      className="flex items-start gap-2.5 group cursor-pointer text-left"
     >
       <div
         className={cn(
-          "flex items-center justify-center size-5 rounded border transition-all",
+          "flex items-center justify-center size-5 rounded border transition-all shrink-0 mt-0.5",
           checked
             ? "bg-blue-600 border-blue-600"
             : "bg-white dark:bg-muted border-border hover:border-blue-400"
@@ -90,7 +90,7 @@ export function IntakeCheckbox({
       </div>
       <span
         className={cn(
-          "text-sm transition-all",
+          "text-sm transition-all break-words flex-1",
           checked ? "line-through text-muted-foreground" : "text-foreground"
         )}
       >
