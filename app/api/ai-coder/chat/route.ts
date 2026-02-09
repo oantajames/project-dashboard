@@ -9,7 +9,7 @@
 
 // Allow long-running tool execution (e.g. triggerCodeChange: sandbox + clone + CLI + preview).
 // Vercel Pro max is 300; set to match or stay under your plan limit.
-export const maxDuration = 300
+export const maxDuration = 800
 
 import { streamText, convertToModelMessages, stepCountIs } from "ai"
 import { anthropic } from "@ai-sdk/anthropic"

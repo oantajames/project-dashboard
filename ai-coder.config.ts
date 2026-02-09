@@ -157,11 +157,12 @@ _Generated via AI Coder by {{user}}_`,
 
   // ── Sandbox ──
   // timeoutMs: per-command limit (e.g. Claude CLI run).
-  // Pipeline only needs: clone + branch + CLI + commit + push (~70s typical).
+  // Complex multi-file tasks can take 5-8 min in the CLI alone,
+  // so give 10 min headroom to avoid premature deadline_exceeded errors.
   sandbox: {
     provider: "e2b",
     templateId: process.env.E2B_TEMPLATE_ID || "claude-code-sandbox",
-    timeoutMs: 300_000, // 5 min — plenty for clone + CLI + push
+    timeoutMs: 600_000, // 10 min — complex tasks need more headroom
   },
 
   // ── Deploy ──
