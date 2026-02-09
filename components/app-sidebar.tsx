@@ -26,7 +26,6 @@ import {
   Receipt,
   FileText,
   Gear,
-  Question,
   CaretRight,
   CaretUpDown,
   SignOut,
@@ -53,7 +52,6 @@ const navItemPaths: Record<NavItemId, string> = {
 
 const footerItemIcons: Record<SidebarFooterItemId, React.ComponentType<{ className?: string }>> = {
   settings: Gear,
-  help: Question,
 }
 
 export function AppSidebar() {
