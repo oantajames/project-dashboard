@@ -76,7 +76,12 @@ export default defineConfig({
       description: "Add new pages, components, or functionality",
       icon: "PlusCircle",
       prompt:
-        "You are adding a new feature. Follow existing patterns in the codebase. Create new files as needed but reuse existing components and utilities. Place new components in the appropriate subdirectory.",
+        "You are adding a new feature. You MUST follow this workflow:\n" +
+        "1. FIRST, call createPlan with a clear title, overview, and a numbered list of implementation steps.\n" +
+        "2. Before coding, call updatePlan to mark all steps as 'in_progress'.\n" +
+        "3. Call triggerCodeChange with a detailed prompt covering ALL plan items.\n" +
+        "4. After the PR is created, call updatePlan to mark all items as 'done'.\n\n" +
+        "Follow existing patterns in the codebase. Create new files as needed but reuse existing components and utilities. Place new components in the appropriate subdirectory.",
       allowNewFiles: true,
       requiresApproval: true,
     },

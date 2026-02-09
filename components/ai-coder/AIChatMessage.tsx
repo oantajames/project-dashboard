@@ -13,8 +13,11 @@
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { PRStatusCard } from "./PRStatusCard"
+import { LivePRStatusCard } from "./LivePRStatusCard"
 import { PipelineTimeline } from "./PipelineTimeline"
-import { Robot, User } from "@phosphor-icons/react"
+import { PlanCard, type PlanItem } from "./PlanCard"
+import { User, ListChecks } from "@phosphor-icons/react"
+import { TinyFace } from "./TinyFace"
 import type { UIMessage } from "ai"
 
 interface AIChatMessageProps {
@@ -32,7 +35,7 @@ export function AIChatMessage({ message }: AIChatMessageProps) {
           {isUser ? (
             <User className="h-4 w-4 text-primary" />
           ) : (
-            <Robot className="h-4 w-4 text-blue-500" />
+            <TinyFace className="text-[10px] text-blue-500" />
           )}
         </AvatarFallback>
       </Avatar>
@@ -41,7 +44,7 @@ export function AIChatMessage({ message }: AIChatMessageProps) {
       <div className={`flex-1 space-y-2 ${isUser ? "text-right" : ""}`}>
         {/* Label */}
         <p className="text-xs text-muted-foreground">
-          {isUser ? "You" : "AI Coder"}
+          {isUser ? "You" : "Tiny Viber"}
         </p>
 
         {/* Render message parts */}
@@ -98,10 +101,26 @@ function renderToolPart(part: ToolPartData, index: number) {
   const toolName = part.type.replace("tool-", "")
   const { state, output, errorText } = part
 
-  // Tool is still running — show pipeline progress
+  // Tool is still running — show appropriate progress indicator
   if (state === "input-streaming" || state === "input-available" || state === "approval-requested") {
     if (toolName === "triggerCodeChange") {
       return <PipelineTimeline key={index} status="coding" />
+    }
+    if (toolName === "createPlan") {
+      return (
+        <div key={index} className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+          <ListChecks className="h-4 w-4 text-blue-500 animate-pulse" weight="duotone" />
+          <span>Creating plan...</span>
+        </div>
+      )
+    }
+    if (toolName === "updatePlan") {
+      return (
+        <div key={index} className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+          <ListChecks className="h-4 w-4 text-blue-500 animate-pulse" weight="duotone" />
+          <span>Updating plan...</span>
+        </div>
+      )
     }
     return (
       <div key={index} className="flex items-center gap-2 text-sm text-muted-foreground py-2">
@@ -126,17 +145,38 @@ function renderToolPart(part: ToolPartData, index: number) {
   if (state === "output-available" && output) {
     const typedResult = output as Record<string, unknown>
 
-    // ── triggerCodeChange → show PR card (PR-first flow) ──
-    if (toolName === "triggerCodeChange") {
+    // ── createPlan / updatePlan → show PlanCard ──
+    if (toolName === "createPlan" || toolName === "updatePlan") {
       return (
-        <PRStatusCard
+        <PlanCard
           key={index}
-          status={typedResult.status as "success" | "failed"}
-          prUrl={typedResult.prUrl as string | undefined}
-          prNumber={typedResult.prNumber as number | undefined}
+          title={typedResult.title as string | undefined}
+          overview={typedResult.overview as string | undefined}
+          items={typedResult.items as PlanItem[]}
+        />
+      )
+    }
+
+    // ── triggerCodeChange → show live PR card with webhook updates ──
+    if (toolName === "triggerCodeChange") {
+      // Failed status: use static PRStatusCard for error display
+      if (typedResult.status === "failed") {
+        return (
+          <PRStatusCard
+            key={index}
+            status="failed"
+            error={typedResult.error as string | undefined}
+          />
+        )
+      }
+      // Success: use LivePRStatusCard for real-time webhook updates
+      return (
+        <LivePRStatusCard
+          key={index}
+          prNumber={typedResult.prNumber as number}
+          prUrl={typedResult.prUrl as string}
           branchName={typedResult.branchName as string | undefined}
           filesChanged={typedResult.filesChanged as string[] | undefined}
-          error={typedResult.error as string | undefined}
         />
       )
     }

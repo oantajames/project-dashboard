@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * AI Coder — Chat History Persistence
+ * Tiny Viber — Chat History Persistence
  *
  * Saves and loads chat sessions to/from Firestore.
  * Provides session management (create, list, load) and
@@ -9,8 +9,7 @@
  *
  * Firestore collections:
  * - aiCoderSessions/{id} — session metadata
- * - aiCoderSessions/{id}/messages/{id} — individual messages
- * - aiCoderRequests/{id} — code change pipeline requests
+ * - aiCoderSessions/{id}/messages/{id} — individual messages (with AI SDK v6 parts)
  */
 
 import { useState, useEffect, useCallback } from "react"
@@ -33,7 +32,7 @@ import type { AICoderSession, AICoderChatMessage } from "@/lib/ai-coder/types"
 // ── Session Management ──
 
 /**
- * Hook for listing and managing AI Coder chat sessions.
+ * Hook for listing and managing Tiny Viber chat sessions.
  */
 export function useAICoderSessions() {
   const [sessions, setSessions] = useState<AICoderSession[]>([])
@@ -71,7 +70,7 @@ export function useAICoderSessions() {
         setLoading(false)
       },
       (err) => {
-        console.error("Error fetching AI Coder sessions:", err)
+        console.error("Error fetching Tiny Viber sessions:", err)
         setLoading(false)
       }
     )
@@ -106,7 +105,8 @@ export function useAICoderSessions() {
 
 /**
  * Hook for loading and saving messages in a specific chat session.
- * Returns messages with real-time updates and a function to save new messages.
+ * Stores the full AI SDK v6 `parts` array so tool invocations and
+ * structured output survive reload.
  */
 export function useAICoderMessages(sessionId: string | null) {
   const [messages, setMessages] = useState<AICoderChatMessage[]>([])
@@ -133,7 +133,8 @@ export function useAICoderMessages(sessionId: string | null) {
             id: d.id,
             role: docData.role as "user" | "assistant",
             content: docData.content as string,
-            toolInvocations: docData.toolInvocations as unknown[] | undefined,
+            parts: (docData.parts as unknown[]) || undefined,
+            toolInvocations: (docData.toolInvocations as unknown[]) || undefined,
             createdAt: (docData.createdAt as Timestamp)?.toDate() || new Date(),
           } satisfies AICoderChatMessage
         })
@@ -141,7 +142,7 @@ export function useAICoderMessages(sessionId: string | null) {
         setLoading(false)
       },
       (err) => {
-        console.error("Error fetching AI Coder messages:", err)
+        console.error("Error fetching Tiny Viber messages:", err)
         setLoading(false)
       }
     )
@@ -150,20 +151,21 @@ export function useAICoderMessages(sessionId: string | null) {
   }, [sessionId])
 
   /**
-   * Saves a message to the session's messages subcollection.
+   * Saves a single message to the session's messages subcollection.
+   * Stores `parts` (AI SDK v6 format) alongside plain `content` for backward compat.
    */
   const saveMessage = useCallback(
     async (
       role: "user" | "assistant",
       content: string,
-      toolInvocations?: unknown[]
+      parts?: unknown[],
     ) => {
       if (!sessionId) return
 
       await addDoc(collection(db, "aiCoderSessions", sessionId, "messages"), {
         role,
         content,
-        toolInvocations: toolInvocations || null,
+        parts: parts || null,
         createdAt: serverTimestamp(),
       })
 
@@ -175,7 +177,33 @@ export function useAICoderMessages(sessionId: string | null) {
     [sessionId]
   )
 
-  return { messages, loading, saveMessage }
+  /**
+   * Batch-save multiple messages at once (e.g. user + assistant after a turn).
+   * Each entry: { role, content, parts? }
+   */
+  const saveMessages = useCallback(
+    async (
+      msgs: Array<{ role: "user" | "assistant"; content: string; parts?: unknown[] }>
+    ) => {
+      if (!sessionId || msgs.length === 0) return
+
+      for (const msg of msgs) {
+        await addDoc(collection(db, "aiCoderSessions", sessionId, "messages"), {
+          role: msg.role,
+          content: msg.content,
+          parts: msg.parts || null,
+          createdAt: serverTimestamp(),
+        })
+      }
+
+      await updateDoc(doc(db, "aiCoderSessions", sessionId), {
+        updatedAt: serverTimestamp(),
+      })
+    },
+    [sessionId]
+  )
+
+  return { messages, loading, saveMessage, saveMessages }
 }
 
 // ── Code Change Requests ──
@@ -212,7 +240,7 @@ export function useAICoderRequests(sessionId: string | null) {
         setLoading(false)
       },
       (err) => {
-        console.error("Error fetching AI Coder requests:", err)
+        console.error("Error fetching Tiny Viber requests:", err)
         setLoading(false)
       }
     )

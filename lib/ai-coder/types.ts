@@ -154,7 +154,11 @@ export interface AICoderSession {
 export interface AICoderChatMessage {
   id: string
   role: "user" | "assistant"
+  /** Plain text content (backward compat / fallback) */
   content: string
+  /** AI SDK v6 message parts — preserves tool invocations, structured output, etc. */
+  parts?: unknown[]
+  /** @deprecated — use `parts` instead */
   toolInvocations?: unknown[]
   createdAt: Date
 }

@@ -15,9 +15,9 @@ import { streamText, convertToModelMessages, stepCountIs } from "ai"
 import { anthropic } from "@ai-sdk/anthropic"
 import { verifyAdminUser } from "@/lib/ai-coder/auth"
 import { getSkillById } from "@/lib/ai-coder/config"
+import { getMergedConfig } from "@/lib/ai-coder/config-store"
 import { validatePrompt, buildSystemPrompt } from "@/lib/ai-coder/rules-engine"
 import { createTools } from "@/lib/ai-coder/tools"
-import config from "@/ai-coder.config"
 
 export async function POST(req: Request) {
   // 1. Verify admin authentication
@@ -31,7 +31,10 @@ export async function POST(req: Request) {
   // }
   const user = { uid: "dev", email: "james@tryomni.com", displayName: "James", role: "owner" }
 
-  // 2. Parse the request body (AI SDK sends messages + custom body)
+  // 2. Load merged config (static defaults + Firestore overrides)
+  const config = await getMergedConfig()
+
+  // 3. Parse the request body (AI SDK sends messages + custom body)
   const body = await req.json()
   const { messages, skillId, screenContext } = body
 
@@ -42,7 +45,7 @@ export async function POST(req: Request) {
     })
   }
 
-  // 3. Resolve the selected skill (default to first skill if not specified)
+  // 4. Resolve the selected skill (default to first skill if not specified)
   const resolvedSkillId = skillId || config.skills[0].id
   let skill
   try {
@@ -54,7 +57,7 @@ export async function POST(req: Request) {
     })
   }
 
-  // 4. Validate the latest user message against rules
+  // 5. Validate the latest user message against rules
   // AI SDK v6 sends UIMessage format with `parts` array, not `content`
   const lastUserMessage = [...messages].reverse().find((m: { role: string }) => m.role === "user")
   if (lastUserMessage) {
@@ -88,17 +91,17 @@ export async function POST(req: Request) {
     }
   }
 
-  // 5. Build the system prompt with rules + skill context + optional screen context
+  // 6. Build the system prompt with rules + skill context + optional screen context
   const systemPrompt = buildSystemPrompt(skill, config, screenContext)
 
-  // 6. Create the tool set with user context
+  // 7. Create the tool set with user context
   const tools = createTools(config, user.displayName)
 
-  // 7. Convert UI messages (v6 parts format) to model messages for streamText
+  // 8. Convert UI messages (v6 parts format) to model messages for streamText
   // NOTE: convertToModelMessages is async — must be awaited
   const modelMessages = await convertToModelMessages(messages)
 
-  // 8. Stream the response using AI SDK
+  // 9. Stream the response using AI SDK
   // stopWhen controls how many tool-call round-trips the model can do.
   // Default is stepCountIs(1) which stops after one tool call. We allow up to 5
   // so the model can: get context → plan → trigger code change → check status → summarize.
