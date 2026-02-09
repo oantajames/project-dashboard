@@ -108,10 +108,19 @@ function renderToolPart(part: ToolPartData, index: number) {
       return <PipelineTimeline key={index} status="validating" requestId={part.toolCallId} />
     }
     if (toolName === "createPlan") {
+      // Show a loading indicator, but also pass planId so the PlanCard
+      // can subscribe to Firestore and start showing items as soon as
+      // the server writes them (before the tool finishes).
       return (
-        <div key={index} className="flex items-center gap-2 text-sm text-muted-foreground py-2">
-          <ListChecks className="h-4 w-4 text-blue-500 animate-pulse" weight="duotone" />
-          <span>Creating plan...</span>
+        <div key={index}>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+            <ListChecks className="h-4 w-4 text-blue-500 animate-pulse" weight="duotone" />
+            <span>Creating plan...</span>
+          </div>
+          <PlanCard
+            planId={part.toolCallId}
+            items={[]}
+          />
         </div>
       )
     }
@@ -146,8 +155,21 @@ function renderToolPart(part: ToolPartData, index: number) {
   if (state === "output-available" && output) {
     const typedResult = output as Record<string, unknown>
 
-    // ── createPlan / updatePlan → show PlanCard ──
-    if (toolName === "createPlan" || toolName === "updatePlan") {
+    // ── createPlan → PlanCard with live Firestore subscription ──
+    if (toolName === "createPlan") {
+      return (
+        <PlanCard
+          key={index}
+          title={typedResult.title as string | undefined}
+          overview={typedResult.overview as string | undefined}
+          items={typedResult.items as PlanItem[]}
+          planId={part.toolCallId}
+        />
+      )
+    }
+
+    // ── updatePlan → static PlanCard (final snapshot, no live sub needed) ──
+    if (toolName === "updatePlan") {
       return (
         <PlanCard
           key={index}

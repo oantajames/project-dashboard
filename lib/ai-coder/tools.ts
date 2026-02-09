@@ -19,12 +19,18 @@ import { getSkillById } from "./config"
 import type { AICoderConfig, PipelineStatus } from "./types"
 
 export function createTools(config: AICoderConfig, userName: string) {
+  // Shared state within a single conversation turn.
+  // createPlan stores its Firestore doc ID here so triggerCodeChange
+  // can update plan item statuses as the pipeline progresses.
+  let currentPlanDocId: string | null = null
+
   return {
     // ── Plan Mode Tools ──
 
     /**
      * Creates a structured implementation plan with a todo list.
-     * Lightweight pass-through — echoes the plan back with "pending" statuses.
+     * Writes the plan to Firestore so the PlanCard can subscribe for
+     * real-time status updates as the pipeline progresses.
      */
     createPlan: tool({
       description:
@@ -48,15 +54,29 @@ export function createTools(config: AICoderConfig, userName: string) {
           .min(1)
           .describe("Ordered list of implementation steps"),
       }),
-      execute: async ({ title, overview, items }) => {
-        return {
-          title,
-          overview,
-          items: items.map((item) => ({
-            ...item,
-            status: "pending" as const,
-          })),
+      execute: async ({ title, overview, items }, { toolCallId }) => {
+        const planItems = items.map((item) => ({
+          ...item,
+          status: "pending" as const,
+        }))
+
+        // Write the plan to Firestore so PlanCard can subscribe for live updates.
+        // The toolCallId becomes the plan doc ID — the frontend has it via the tool part.
+        try {
+          const adminDb = getAdminDb()
+          await adminDb.collection("aiCoderPlans").doc(toolCallId).set({
+            title,
+            overview,
+            items: planItems,
+            createdAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          })
+          currentPlanDocId = toolCallId
+        } catch (err) {
+          console.error("[TinyViber] Failed to write plan doc:", err)
         }
+
+        return { title, overview, items: planItems }
       },
     }),
 
@@ -142,6 +162,29 @@ export function createTools(config: AICoderConfig, userName: string) {
           }
         }
 
+        // Helper: update plan item statuses in the plan Firestore doc
+        const updatePlanItems = async (
+          itemStatus: "pending" | "in_progress" | "done" | "failed",
+        ) => {
+          if (!currentPlanDocId) return
+          try {
+            const planRef = adminDb.collection("aiCoderPlans").doc(currentPlanDocId)
+            const planSnap = await planRef.get()
+            if (!planSnap.exists) return
+            const planData = planSnap.data()
+            const items = planData?.items as Array<{ id: string; label: string; status: string }>
+            if (!items) return
+
+            const updatedItems = items.map((item) => ({ ...item, status: itemStatus }))
+            await planRef.set(
+              { items: updatedItems, updatedAt: FieldValue.serverTimestamp() },
+              { merge: true }
+            )
+          } catch (err) {
+            console.error("[TinyViber] Failed to update plan items:", err)
+          }
+        }
+
         try {
           const skill = getSkillById(config, skillId)
           const branchName = generateBranchName(summary, config)
@@ -162,6 +205,9 @@ export function createTools(config: AICoderConfig, userName: string) {
           } catch (firestoreErr) {
             console.error("[TinyViber] Failed to create aiCoderRequests doc:", firestoreErr)
           }
+
+          // Mark plan items as in_progress now that the pipeline is starting
+          await updatePlanItems("in_progress")
 
           // Phase 1: Run AI agent in sandbox, commit, push
           // The onProgress callback keeps Firestore in sync with each step.
@@ -193,6 +239,9 @@ export function createTools(config: AICoderConfig, userName: string) {
             filesChanged: result.filesChanged,
           })
 
+          // Mark all plan items as done — pipeline completed successfully
+          await updatePlanItems("done")
+
           // Auto-merge if configured (non-blocking — fire and forget)
           if (config.git.autoMerge) {
             mergePR(pr.prNumber, config).catch(() => {
@@ -214,8 +263,9 @@ export function createTools(config: AICoderConfig, userName: string) {
         } catch (error) {
           const message = error instanceof Error ? error.message : "Unknown error occurred"
 
-          // Mark the request as failed in Firestore
+          // Mark the request and plan items as failed in Firestore
           await updateStatus("failed", { error: message })
+          await updatePlanItems("failed")
 
           const isTimeout =
             message.includes("deadline_exceeded") ||

@@ -6,6 +6,10 @@
  * Visual card showing an implementation plan with a todo list and progress bar.
  * Rendered inline in the chat when Claude calls createPlan or updatePlan tools.
  * Styled consistently with PipelineTimeline.
+ *
+ * When a `planId` is provided, the card subscribes to Firestore for real-time
+ * item status updates (pending → in_progress → done) as the pipeline progresses.
+ * Falls back to static `items` prop for chat history / updatePlan snapshots.
  */
 
 import {
@@ -14,24 +18,36 @@ import {
   Circle,
   MinusCircle,
   ListChecks,
+  XCircle,
 } from "@phosphor-icons/react"
 import { Progress } from "@/components/ui/progress"
+import { useAICoderPlanStatus } from "@/hooks/useAICoderPlanStatus"
 
 export interface PlanItem {
   id: string
   label: string
-  status: "pending" | "in_progress" | "done" | "skipped"
+  status: "pending" | "in_progress" | "done" | "skipped" | "failed"
 }
 
 interface PlanCardProps {
   title?: string
   overview?: string
   items: PlanItem[]
+  /** Pass the createPlan toolCallId to enable real-time Firestore updates */
+  planId?: string | null
 }
 
-export function PlanCard({ title, overview, items }: PlanCardProps) {
-  const doneCount = items.filter((i) => i.status === "done").length
-  const totalCount = items.length
+export function PlanCard({ title, overview, items, planId }: PlanCardProps) {
+  // Subscribe to Firestore for live item statuses when planId is available
+  const { liveData } = useAICoderPlanStatus(planId ?? null)
+
+  // Use live data when available, otherwise fall back to the static props
+  const displayItems = liveData?.items ?? items
+  const displayTitle = liveData?.title ?? title
+  const displayOverview = liveData?.overview ?? overview
+
+  const doneCount = displayItems.filter((i) => i.status === "done").length
+  const totalCount = displayItems.length
   const progressPercent = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0
 
   return (
@@ -40,18 +56,18 @@ export function PlanCard({ title, overview, items }: PlanCardProps) {
       <div className="flex items-center gap-2">
         <ListChecks className="h-4.5 w-4.5 text-blue-500" weight="duotone" />
         <span className="text-sm font-semibold text-foreground">
-          {title || "Implementation Plan"}
+          {displayTitle || "Implementation Plan"}
         </span>
       </div>
 
       {/* Overview */}
-      {overview && (
-        <p className="text-xs text-muted-foreground leading-relaxed">{overview}</p>
+      {displayOverview && (
+        <p className="text-xs text-muted-foreground leading-relaxed">{displayOverview}</p>
       )}
 
       {/* Todo list */}
       <div className="space-y-2.5 pt-1">
-        {items.map((item) => (
+        {displayItems.map((item) => (
           <div key={item.id} className="flex items-start gap-2.5">
             {/* Status icon */}
             <div className="mt-0.5 shrink-0">
@@ -61,6 +77,8 @@ export function PlanCard({ title, overview, items }: PlanCardProps) {
                 <CircleNotch className="h-4 w-4 text-blue-500 animate-spin" />
               ) : item.status === "skipped" ? (
                 <MinusCircle className="h-4 w-4 text-muted-foreground/50" weight="fill" />
+              ) : item.status === "failed" ? (
+                <XCircle className="h-4 w-4 text-red-500" weight="fill" />
               ) : (
                 <Circle className="h-4 w-4 text-muted-foreground/40" />
               )}
@@ -75,7 +93,9 @@ export function PlanCard({ title, overview, items }: PlanCardProps) {
                     ? "text-foreground font-medium"
                     : item.status === "skipped"
                       ? "text-muted-foreground/50 line-through"
-                      : "text-muted-foreground/70"
+                      : item.status === "failed"
+                        ? "text-red-500"
+                        : "text-muted-foreground/70"
               }`}
             >
               {item.label}
