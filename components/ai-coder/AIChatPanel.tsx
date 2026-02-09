@@ -55,7 +55,12 @@ export function AIChatPanel({
   const isNearBottomRef = useRef(true)
 
   // ── Firestore persistence ──
-  const { messages: firestoreMessages, loading: firestoreLoading, saveMessage } = useAICoderMessages(sessionId)
+  const {
+    messages: firestoreMessages,
+    loading: firestoreLoading,
+    saveMessage,
+    upsertMessage,
+  } = useAICoderMessages(sessionId)
 
   // Convert Firestore messages to AI SDK UIMessage format for initialMessages
   const initialMessages = useMemo<UIMessage[]>(() => {
@@ -72,13 +77,15 @@ export function AIChatPanel({
     }))
   }, [sessionId, firestoreLoading, firestoreMessages])
 
-  // Track which message IDs we've already saved to Firestore
-  const savedMessageIds = useRef<Set<string>>(new Set(
+  // Track which assistant messages have been finalized (saved with complete tool outputs).
+  // Messages loaded from Firestore are considered finalized.
+  const finalizedIds = useRef<Set<string>>(new Set(
     firestoreMessages.map((m) => m.id)
   ))
-  // Keep the set in sync when firestoreMessages changes
   useEffect(() => {
-    savedMessageIds.current = new Set(firestoreMessages.map((m) => m.id))
+    for (const msg of firestoreMessages) {
+      finalizedIds.current.add(msg.id)
+    }
   }, [firestoreMessages])
 
   // Refs for stable transport closure
@@ -119,6 +126,7 @@ export function AIChatPanel({
 
   const {
     messages,
+    setMessages,
     sendMessage,
     stop,
     status,
@@ -129,13 +137,26 @@ export function AIChatPanel({
     initialMessages: initialMessages.length > 0 ? initialMessages : undefined,
   })
 
+  // When Firestore messages load after the initial render (async),
+  // push them into useChat so chat history is visible on session switch.
+  const hasLoadedHistory = useRef(false)
+  useEffect(() => {
+    if (hasLoadedHistory.current) return
+    if (!sessionId || firestoreLoading || initialMessages.length === 0) return
+    // Only set if useChat is still empty (initialMessages arrived too late)
+    if (messages.length === 0 && initialMessages.length > 0) {
+      setMessages(initialMessages)
+    }
+    hasLoadedHistory.current = true
+  }, [sessionId, firestoreLoading, initialMessages, messages.length, setMessages])
+
   // Refs for save-on-unmount (capture latest values without stale closures)
   // NOTE: These must come AFTER useChat so `messages` is defined
   const messagesRef = useRef(messages)
-  const saveMessageRef = useRef(saveMessage)
+  const upsertMessageRef = useRef(upsertMessage)
   const sessionIdRef = useRef(sessionId)
   useEffect(() => { messagesRef.current = messages }, [messages])
-  useEffect(() => { saveMessageRef.current = saveMessage }, [saveMessage])
+  useEffect(() => { upsertMessageRef.current = upsertMessage }, [upsertMessage])
   useEffect(() => { sessionIdRef.current = sessionId }, [sessionId])
 
   const isLoading = status === "submitted" || status === "streaming"
@@ -146,31 +167,34 @@ export function AIChatPanel({
     onLoadingChange?.(isLoading)
   }, [isLoading, onLoadingChange])
 
-  // ── Helper: persist a single unsaved message ──
-  const persistMessage = useCallback(
+  // ── Helper: extract plain text from message parts ──
+  const extractText = (msg: UIMessage) =>
+    msg.parts
+      ?.filter((p): p is { type: "text"; text: string } => p.type === "text")
+      .map((p) => p.text)
+      .join("\n") || ""
+
+  // ── Helper: upsert an assistant message (idempotent — safe to call multiple times) ──
+  const upsertAssistantMsg = useCallback(
     (msg: UIMessage) => {
-      if (!sessionId) return
-      if (savedMessageIds.current.has(msg.id)) return
-      savedMessageIds.current.add(msg.id)
-
-      const textContent = msg.parts
-        ?.filter((p): p is { type: "text"; text: string } => p.type === "text")
-        .map((p) => p.text)
-        .join("\n") || ""
-
-      saveMessage(
-        msg.role as "user" | "assistant",
-        textContent,
+      if (!sessionId || msg.role !== "assistant") return
+      upsertMessage(
+        msg.id,
+        "assistant",
+        extractText(msg),
         msg.parts as unknown[],
-      ).catch((err) => {
-        console.error("[TinyViber] Failed to save message:", err)
-        savedMessageIds.current.delete(msg.id)
+      ).then(() => {
+        finalizedIds.current.add(msg.id)
+      }).catch((err) => {
+        console.error("[TinyViber] Failed to upsert assistant message:", err)
       })
     },
-    [sessionId, saveMessage]
+    [sessionId, upsertMessage]
   )
 
-  // ── 1. Save ALL unsaved messages when a turn completes (status → ready) ──
+  // ── 1. Finalize ALL assistant messages when a turn completes (status → ready) ──
+  // This overwrites any partial streaming saves with the final version
+  // that includes complete tool outputs.
   useEffect(() => {
     const prevStatus = prevStatusRef.current
     prevStatusRef.current = status
@@ -179,45 +203,54 @@ export function AIChatPanel({
     if (status !== "ready") return
     if (prevStatus !== "streaming" && prevStatus !== "submitted") return
 
-    const unsaved = messages.filter((m) => !savedMessageIds.current.has(m.id))
-    for (const msg of unsaved) {
-      persistMessage(msg)
+    // Upsert every assistant message from this conversation.
+    // setDoc is idempotent — already-finalized messages are harmlessly overwritten.
+    const assistantMsgs = messages.filter((m) => m.role === "assistant")
+    for (const msg of assistantMsgs) {
+      upsertAssistantMsg(msg)
     }
-  }, [status, messages, sessionId, persistMessage])
+  }, [status, messages, sessionId, upsertAssistantMsg])
 
-  // ── 2. Save assistant messages periodically during streaming ──
-  // Every 3 seconds while streaming, snapshot any unsaved assistant messages
+  // ── 2. Draft-save assistant messages during streaming (crash recovery) ──
+  // Saves a snapshot once after 5s of streaming. The turn-complete handler
+  // will overwrite this with the final version.
   useEffect(() => {
     if (!sessionId || status !== "streaming") return
 
-    const timer = setInterval(() => {
-      const unsaved = messagesRef.current.filter(
-        (m) => m.role === "assistant" && !savedMessageIds.current.has(m.id)
+    const timer = setTimeout(() => {
+      const assistantMsgs = messagesRef.current.filter(
+        (m) => m.role === "assistant" && !finalizedIds.current.has(m.id)
       )
-      for (const msg of unsaved) {
-        persistMessage(msg)
+      for (const msg of assistantMsgs) {
+        upsertMessage(
+          msg.id,
+          "assistant",
+          extractText(msg),
+          msg.parts as unknown[],
+        ).catch(() => {})
       }
-    }, 3000)
+    }, 5000)
 
-    return () => clearInterval(timer)
-  }, [sessionId, status, persistMessage])
+    return () => clearTimeout(timer)
+  }, [sessionId, status, upsertMessage])
 
   // ── 3. Save on unmount (failsafe when switching sessions or closing) ──
   useEffect(() => {
     return () => {
       if (!sessionIdRef.current) return
-      const unsaved = messagesRef.current.filter(
-        (m) => !savedMessageIds.current.has(m.id)
+      const unfinalized = messagesRef.current.filter(
+        (m) => m.role === "assistant" && !finalizedIds.current.has(m.id)
       )
-      for (const msg of unsaved) {
-        savedMessageIds.current.add(msg.id)
+      for (const msg of unfinalized) {
         const textContent = msg.parts
           ?.filter((p): p is { type: "text"; text: string } => p.type === "text")
           .map((p) => p.text)
           .join("\n") || ""
-        // Fire-and-forget on unmount
-        saveMessageRef.current(
-          msg.role as "user" | "assistant",
+        // Fire-and-forget upsert on unmount — uses setDoc so it won't
+        // create duplicates if the message was already draft-saved.
+        upsertMessageRef.current(
+          msg.id,
+          "assistant",
           textContent,
           msg.parts as unknown[],
         ).catch(() => {})
@@ -269,9 +302,6 @@ export function AIChatPanel({
 
     // Save user message to Firestore immediately (don't wait for turn to complete)
     if (sessionId) {
-      // Generate a temporary ID so we can track it
-      const tempId = `user-${Date.now()}`
-      savedMessageIds.current.add(tempId)
       saveMessage("user", text, [{ type: "text", text }]).catch((err) => {
         console.error("[TinyViber] Failed to save user message:", err)
       })

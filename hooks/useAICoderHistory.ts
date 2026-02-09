@@ -21,6 +21,7 @@ import {
   orderBy,
   onSnapshot,
   addDoc,
+  setDoc,
   updateDoc,
   serverTimestamp,
   Timestamp,
@@ -178,6 +179,39 @@ export function useAICoderMessages(sessionId: string | null) {
   )
 
   /**
+   * Upsert a message using an explicit ID as the Firestore doc ID.
+   * Uses setDoc so the same message can be safely overwritten — e.g. to
+   * persist the *final* assistant message after streaming completes
+   * (replacing any partial save made during streaming).
+   */
+  const upsertMessage = useCallback(
+    async (
+      messageId: string,
+      role: "user" | "assistant",
+      content: string,
+      parts?: unknown[],
+    ) => {
+      if (!sessionId) return
+
+      await setDoc(
+        doc(db, "aiCoderSessions", sessionId, "messages", messageId),
+        {
+          role,
+          content,
+          parts: parts || null,
+          createdAt: serverTimestamp(),
+        }
+      )
+
+      // Update session's updatedAt timestamp
+      await updateDoc(doc(db, "aiCoderSessions", sessionId), {
+        updatedAt: serverTimestamp(),
+      })
+    },
+    [sessionId]
+  )
+
+  /**
    * Batch-save multiple messages at once (e.g. user + assistant after a turn).
    * Each entry: { role, content, parts? }
    */
@@ -203,7 +237,7 @@ export function useAICoderMessages(sessionId: string | null) {
     [sessionId]
   )
 
-  return { messages, loading, saveMessage, saveMessages }
+  return { messages, loading, saveMessage, upsertMessage, saveMessages }
 }
 
 // ── Code Change Requests ──
