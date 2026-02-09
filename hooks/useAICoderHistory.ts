@@ -163,10 +163,15 @@ export function useAICoderMessages(sessionId: string | null) {
     ) => {
       if (!sessionId) return
 
+      // Sanitize parts to strip undefined values — Firestore rejects them
+      const cleanParts = parts && parts.length > 0
+        ? sanitizeForFirestore(parts)
+        : null
+
       await addDoc(collection(db, "aiCoderSessions", sessionId, "messages"), {
         role,
         content,
-        parts: parts || null,
+        parts: cleanParts,
         createdAt: serverTimestamp(),
       })
 
@@ -193,12 +198,17 @@ export function useAICoderMessages(sessionId: string | null) {
     ) => {
       if (!sessionId) return
 
+      // Sanitize parts to strip undefined values — Firestore rejects them
+      const cleanParts = parts && parts.length > 0
+        ? sanitizeForFirestore(parts)
+        : null
+
       await setDoc(
         doc(db, "aiCoderSessions", sessionId, "messages", messageId),
         {
           role,
           content,
-          parts: parts || null,
+          parts: cleanParts,
           createdAt: serverTimestamp(),
         }
       )
@@ -222,10 +232,14 @@ export function useAICoderMessages(sessionId: string | null) {
       if (!sessionId || msgs.length === 0) return
 
       for (const msg of msgs) {
+        const cleanParts = msg.parts && msg.parts.length > 0
+          ? sanitizeForFirestore(msg.parts)
+          : null
+
         await addDoc(collection(db, "aiCoderSessions", sessionId, "messages"), {
           role: msg.role,
           content: msg.content,
-          parts: msg.parts || null,
+          parts: cleanParts,
           createdAt: serverTimestamp(),
         })
       }
@@ -238,6 +252,33 @@ export function useAICoderMessages(sessionId: string | null) {
   )
 
   return { messages, loading, saveMessage, upsertMessage, saveMessages }
+}
+
+// ── Helpers ──
+
+/**
+ * Deep-sanitize data for Firestore: strips `undefined` values and ensures
+ * the entire structure is plain JSON. Firestore rejects `undefined` —
+ * this prevents silent write failures that would lose tool invocation data.
+ */
+function sanitizeForFirestore(data: unknown): unknown {
+  if (data === undefined) return null
+  if (data === null || typeof data !== "object") return data
+  // Firestore handles Date natively — don't enumerate its properties
+  if (data instanceof Date) return data
+
+  if (Array.isArray(data)) {
+    return data.map(sanitizeForFirestore)
+  }
+
+  const result: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
+    // Strip undefined values entirely (Firestore rejects them)
+    if (value !== undefined) {
+      result[key] = sanitizeForFirestore(value)
+    }
+  }
+  return result
 }
 
 // ── Code Change Requests ──
