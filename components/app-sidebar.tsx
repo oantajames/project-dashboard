@@ -26,7 +26,6 @@ import {
   Receipt,
   FileText,
   Gear,
-  Layout,
   Question,
   CaretRight,
   CaretUpDown,
@@ -54,7 +53,6 @@ const navItemPaths: Record<NavItemId, string> = {
 
 const footerItemIcons: Record<SidebarFooterItemId, React.ComponentType<{ className?: string }>> = {
   settings: Gear,
-  templates: Layout,
   help: Question,
 }
 
