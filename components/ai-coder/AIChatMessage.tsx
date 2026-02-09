@@ -104,7 +104,8 @@ function renderToolPart(part: ToolPartData, index: number) {
   // Tool is still running — show appropriate progress indicator
   if (state === "input-streaming" || state === "input-available" || state === "approval-requested") {
     if (toolName === "triggerCodeChange") {
-      return <PipelineTimeline key={index} status="coding" />
+      // Pass toolCallId so PipelineTimeline can subscribe to real-time progress
+      return <PipelineTimeline key={index} status="validating" requestId={part.toolCallId} />
     }
     if (toolName === "createPlan") {
       return (
@@ -173,6 +174,7 @@ function renderToolPart(part: ToolPartData, index: number) {
       return (
         <LivePRStatusCard
           key={index}
+          requestId={typedResult.requestId as string | undefined}
           prNumber={typedResult.prNumber as number}
           prUrl={typedResult.prUrl as string}
           branchName={typedResult.branchName as string | undefined}

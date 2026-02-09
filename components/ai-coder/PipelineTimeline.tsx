@@ -5,6 +5,9 @@
  *
  * Vertical timeline showing the progress of a code change pipeline.
  * Steps: Validating -> Creating branch -> AI coding -> Pushing -> Creating PR -> Deploying
+ *
+ * When a `requestId` is provided, subscribes to the Firestore doc for
+ * real-time status updates as the server-side orchestrator progresses.
  */
 
 import {
@@ -13,6 +16,7 @@ import {
   Circle,
   XCircle,
 } from "@phosphor-icons/react"
+import { useAICoderPipelineStatus } from "@/hooks/useAICoderPipelineStatus"
 import type { PipelineStatus } from "@/lib/ai-coder/types"
 
 interface PipelineStep {
@@ -63,11 +67,20 @@ const PIPELINE_STEPS: PipelineStep[] = [
 ]
 
 interface PipelineTimelineProps {
+  /** Fallback status when no live data is available */
   status: PipelineStatus
   error?: string
+  /** Firestore doc ID (= toolCallId) for real-time progress subscription */
+  requestId?: string | null
 }
 
-export function PipelineTimeline({ status, error }: PipelineTimelineProps) {
+export function PipelineTimeline({ status: fallbackStatus, error: fallbackError, requestId }: PipelineTimelineProps) {
+  // Subscribe to Firestore for real-time pipeline progress
+  const { liveData } = useAICoderPipelineStatus(requestId ?? null)
+
+  // Use live data when available, otherwise fall back to the static prop
+  const status = liveData?.status ?? fallbackStatus
+  const error = liveData?.error ?? fallbackError
   const isFailed = status === "failed"
 
   return (
@@ -76,7 +89,6 @@ export function PipelineTimeline({ status, error }: PipelineTimelineProps) {
         {PIPELINE_STEPS.map((step, index) => {
           const isCompleted = step.completedAt.includes(status)
           const isActive = step.activeAt.includes(status)
-          const isPending = !isCompleted && !isActive
           // If failed, the currently active step is the failure point
           const isFailurePoint = isFailed && isActive
 

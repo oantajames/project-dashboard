@@ -11,12 +11,12 @@
 
 import { tool } from "ai"
 import { z } from "zod"
-import { collection, addDoc, serverTimestamp } from "firebase/firestore"
-import { db } from "@/lib/firebase"
+import { FieldValue } from "firebase-admin/firestore"
+import { getAdminDb } from "./admin-db"
 import { executeAndPush, generateBranchName } from "./orchestrator"
 import { createPullRequest, getPRStatus, getPreviewUrl, mergePR } from "./github"
 import { getSkillById } from "./config"
-import type { AICoderConfig } from "./types"
+import type { AICoderConfig, PipelineStatus } from "./types"
 
 export function createTools(config: AICoderConfig, userName: string) {
   return {
@@ -120,20 +120,61 @@ export function createTools(config: AICoderConfig, userName: string) {
           .string()
           .describe("The skill ID to use for this change (e.g., 'ui-enhancement', 'bug-fix')"),
       }),
-      execute: async ({ summary, prompt, skillId }) => {
+      execute: async ({ summary, prompt, skillId }, { toolCallId }) => {
+        // Use the AI SDK toolCallId as the Firestore doc ID so the frontend
+        // can subscribe to real-time pipeline progress during streaming.
+        const requestId = toolCallId
+        const adminDb = getAdminDb()
+        const requestRef = adminDb.collection("aiCoderRequests").doc(requestId)
+
+        // Helper: update the pipeline status in Firestore
+        const updateStatus = async (
+          status: PipelineStatus,
+          extra?: Record<string, unknown>,
+        ) => {
+          try {
+            await requestRef.set(
+              { status, updatedAt: FieldValue.serverTimestamp(), ...extra },
+              { merge: true }
+            )
+          } catch (err) {
+            console.error("[TinyViber] Failed to update request status:", err)
+          }
+        }
+
         try {
           const skill = getSkillById(config, skillId)
           const branchName = generateBranchName(summary, config)
 
+          // Create the Firestore doc at the START so the frontend can
+          // subscribe immediately and see real-time pipeline progress.
+          try {
+            await requestRef.set({
+              status: "validating",
+              summary,
+              branchName,
+              skillId,
+              checksStatus: "pending",
+              previewUrl: null,
+              createdAt: FieldValue.serverTimestamp(),
+              updatedAt: FieldValue.serverTimestamp(),
+            })
+          } catch (firestoreErr) {
+            console.error("[TinyViber] Failed to create aiCoderRequests doc:", firestoreErr)
+          }
+
           // Phase 1: Run AI agent in sandbox, commit, push
+          // The onProgress callback keeps Firestore in sync with each step.
           const result = await executeAndPush({
             prompt,
             skill,
             config,
             branchName,
+            onProgress: updateStatus,
           })
 
           // Phase 2: Create the PR on GitHub
+          await updateStatus("creating_pr")
           const pr = await createPullRequest({
             branchName: result.branchName,
             title: summary,
@@ -144,24 +185,13 @@ export function createTools(config: AICoderConfig, userName: string) {
             config,
           })
 
-          // Phase 3: Write Firestore doc so the webhook handler can update live status
-          try {
-            await addDoc(collection(db, "aiCoderRequests"), {
-              prNumber: pr.prNumber,
-              prUrl: pr.prUrl,
-              branchName: result.branchName,
-              commitSha: result.commitSha,
-              filesChanged: result.filesChanged,
-              status: "creating_pr",
-              checksStatus: "pending",
-              previewUrl: null,
-              createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp(),
-            })
-          } catch (firestoreErr) {
-            // Non-fatal: webhook updates won't work but the PR was still created
-            console.error("[TinyViber] Failed to write aiCoderRequests doc:", firestoreErr)
-          }
+          // Phase 3: Update the Firestore doc with PR info for webhook tracking
+          await updateStatus("deploying", {
+            prNumber: pr.prNumber,
+            prUrl: pr.prUrl,
+            commitSha: result.commitSha,
+            filesChanged: result.filesChanged,
+          })
 
           // Auto-merge if configured (non-blocking — fire and forget)
           if (config.git.autoMerge) {
@@ -173,6 +203,7 @@ export function createTools(config: AICoderConfig, userName: string) {
 
           return {
             status: "success" as const,
+            requestId,
             prUrl: pr.prUrl,
             prNumber: pr.prNumber,
             branchName: result.branchName,
@@ -182,12 +213,17 @@ export function createTools(config: AICoderConfig, userName: string) {
           }
         } catch (error) {
           const message = error instanceof Error ? error.message : "Unknown error occurred"
+
+          // Mark the request as failed in Firestore
+          await updateStatus("failed", { error: message })
+
           const isTimeout =
             message.includes("deadline_exceeded") ||
             message.includes("timed out") ||
             message.includes("timeout")
           return {
             status: "failed" as const,
+            requestId,
             error: message,
             doNotRetry: true,
             instruction: isTimeout

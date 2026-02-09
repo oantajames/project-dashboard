@@ -13,28 +13,7 @@
  */
 
 import { createHmac } from "crypto"
-import { initializeApp, getApps, cert } from "firebase-admin/app"
-import { getFirestore } from "firebase-admin/firestore"
-
-// ── Firebase Admin ──
-
-function getAdminFirestore() {
-  let app
-  if (getApps().length > 0) {
-    app = getApps()[0]
-  } else {
-    const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_KEY
-      ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY)
-      : undefined
-
-    app = initializeApp(
-      serviceAccount
-        ? { credential: cert(serviceAccount), projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID }
-        : { projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID }
-    )
-  }
-  return getFirestore(app)
-}
+import { getAdminDb } from "@/lib/ai-coder/admin-db"
 
 // ── Webhook Verification ──
 
@@ -102,7 +81,7 @@ async function handlePullRequestEvent(payload: {
   pull_request: { number: number; merged: boolean; html_url: string }
 }) {
   const { action, pull_request } = payload
-  const db = getAdminFirestore()
+  const db = getAdminDb()
 
   // Find the request document by PR number
   const snapshot = await db
@@ -142,7 +121,7 @@ async function handleCheckRunEvent(payload: {
   const { action, check_run } = payload
   if (action !== "completed" || !check_run.pull_requests.length) return
 
-  const db = getAdminFirestore()
+  const db = getAdminDb()
   const prNumber = check_run.pull_requests[0].number
 
   const snapshot = await db
@@ -181,7 +160,7 @@ async function handleDeploymentStatus(payload: {
     deployment_status.environment_url || deployment_status.target_url
   if (!previewUrl) return
 
-  const db = getAdminFirestore()
+  const db = getAdminDb()
 
   // Find request by deployment SHA — this is a best-effort match
   // since we store the commitSha from the sandbox

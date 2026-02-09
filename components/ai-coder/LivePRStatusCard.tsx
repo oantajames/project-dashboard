@@ -4,7 +4,7 @@
  * Tiny Viber — Live PR Status Card
  *
  * Extends the static PRStatusCard with real-time status updates from Firestore.
- * Subscribes to the aiCoderRequests doc via useAICoderPRStatus hook.
+ * Subscribes to the aiCoderRequests doc via useAICoderPipelineStatus hook.
  * Shows a live status timeline: PR Created → CI Checks → Preview → Merged.
  *
  * Updates automatically when GitHub webhooks fire (check_run, deployment_status,
@@ -13,11 +13,10 @@
 
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { useAICoderPRStatus } from "@/hooks/useAICoderPRStatus"
+import { useAICoderPipelineStatus } from "@/hooks/useAICoderPipelineStatus"
 import {
   GitPullRequest,
   GitMerge,
-  Globe,
   CheckCircle,
   XCircle,
   Clock,
@@ -27,6 +26,8 @@ import {
 } from "@phosphor-icons/react"
 
 interface LivePRStatusCardProps {
+  /** Firestore doc ID (= toolCallId) for direct subscription */
+  requestId?: string
   prNumber: number
   prUrl: string
   branchName?: string
@@ -34,20 +35,22 @@ interface LivePRStatusCardProps {
 }
 
 export function LivePRStatusCard({
+  requestId,
   prNumber,
   prUrl,
   branchName,
   filesChanged,
 }: LivePRStatusCardProps) {
-  const { liveStatus } = useAICoderPRStatus(prNumber)
+  // Subscribe directly to the pipeline doc by ID (more reliable than querying by prNumber)
+  const { liveData } = useAICoderPipelineStatus(requestId ?? null)
 
   // Derive statuses from live data (fallback to initial states)
-  const checksStatus = liveStatus?.checksStatus || "pending"
-  const previewUrl = liveStatus?.previewUrl || null
-  const pipelineStatus = liveStatus?.status || "creating_pr"
+  const checksStatus = liveData?.checksStatus || "pending"
+  const previewUrl = liveData?.previewUrl || null
+  const pipelineStatus = liveData?.status || "deploying"
   const isMerged = pipelineStatus === "complete"
   const isFailed = pipelineStatus === "failed"
-  const isLive = liveStatus !== null
+  const isLive = liveData !== null
 
   return (
     <Card className={`my-3 ${isFailed ? "border-destructive/30 bg-destructive/5" : "border-border/60 bg-muted/20"}`}>
@@ -161,7 +164,7 @@ export function LivePRStatusCard({
               isMerged
                 ? "Merged"
                 : isFailed
-                  ? liveStatus?.error || "PR closed without merge"
+                  ? liveData?.error || "PR closed without merge"
                   : "Waiting to merge"
             }
             status={isMerged ? "done" : isFailed ? "failed" : "waiting"}

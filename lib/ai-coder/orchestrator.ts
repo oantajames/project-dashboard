@@ -13,7 +13,7 @@
 import { Sandbox } from "@e2b/code-interpreter"
 import { validateDiff } from "./rules-engine"
 import { buildProductContextPrompt, mergeProductContext } from "./product-context"
-import type { AICoderConfig, AICoderSkill } from "./types"
+import type { AICoderConfig, AICoderSkill, PipelineStatus } from "./types"
 
 // ── Constants ──
 
@@ -48,6 +48,8 @@ interface ExecuteAndPushParams {
   skill: AICoderSkill
   config: AICoderConfig
   branchName: string
+  /** Called at each pipeline step so the caller can report progress (e.g. to Firestore) */
+  onProgress?: (status: PipelineStatus, extra?: Record<string, unknown>) => Promise<void>
 }
 
 // ── Pipeline: Execute Changes + Commit + Push ──
@@ -62,13 +64,19 @@ interface ExecuteAndPushParams {
 export async function executeAndPush(
   params: ExecuteAndPushParams
 ): Promise<PipelineResult> {
-  const { prompt, skill, config, branchName } = params
+  const { prompt, skill, config, branchName, onProgress } = params
   let sandbox: Sandbox | null = null
+
+  // Helper: report progress (fire-and-forget to avoid blocking the pipeline)
+  const reportProgress = (status: PipelineStatus, extra?: Record<string, unknown>) => {
+    onProgress?.(status, extra).catch(() => {})
+  }
 
   log("Pipeline started", { branchName, skill: skill.id, promptLength: prompt.length })
 
   try {
     // 1. Create sandbox
+    reportProgress("validating")
     log("Step 1: Creating E2B sandbox", { templateId: config.sandbox.templateId })
     sandbox = await Sandbox.create(config.sandbox.templateId, {
       apiKey: process.env.E2B_API_KEY,
@@ -104,6 +112,7 @@ export async function executeAndPush(
     log("Step 3: Clone succeeded")
 
     // 4. Create branch
+    reportProgress("branching")
     log("Step 4: Creating branch", { branchName })
     const branchResult = await runCommand(sandbox, `git checkout -b ${branchName}`, WORKSPACE_DIR)
     if (!branchResult.success) {
@@ -120,6 +129,7 @@ export async function executeAndPush(
     await sandbox.files.write(`${WORKSPACE_DIR}/CLAUDE.md`, claudeRules)
 
     // 7. Run Claude Code CLI
+    reportProgress("coding")
     const cliPrompt = buildCLIPrompt(prompt, skill, config)
     log("Step 6: Running Claude Code CLI", { promptPreview: cliPrompt.slice(0, 200) })
     const agentResult = await runCommand(
@@ -161,6 +171,7 @@ export async function executeAndPush(
     log("Step 9: Files changed", { count: filesChanged.length, files: filesChanged })
 
     // 10. Commit
+    reportProgress("committing")
     const commitMessage = `${config.git.commitPrefix} ${prompt.slice(0, 72)}`
     log("Step 10: Committing", { commitMessage })
     const commitResult = await runCommand(
