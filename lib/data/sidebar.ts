@@ -1,7 +1,5 @@
 export type NavItemId = "dashboard" | "projects" | "clients" | "invoices" | "contracts"
 
-export type SidebarFooterItemId = "settings"
-
 export type NavItem = {
     id: NavItemId
     label: string
@@ -14,11 +12,6 @@ export type ActiveProjectSummary = {
     name: string
     color: string
     progress: number
-}
-
-export type SidebarFooterItem = {
-    id: SidebarFooterItemId
-    label: string
 }
 
 export const navItems: NavItem[] = [
@@ -34,8 +27,4 @@ export const activeProjects: ActiveProjectSummary[] = [
     { id: "fintech-app", name: "Fintech Mobile App", color: "var(--chart-3)", progress: 80 },
     { id: "ecommerce-admin", name: "E-commerce Admin", color: "var(--chart-3)", progress: 65 },
     { id: "healthcare-app", name: "Healthcare Booking App", color: "var(--chart-2)", progress: 10 },
-]
-
-export const footerItems: SidebarFooterItem[] = [
-    { id: "settings", label: "Settings" },
 ]
