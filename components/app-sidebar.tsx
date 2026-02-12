@@ -25,12 +25,11 @@ import {
   Users,
   Receipt,
   FileText,
-  Gear,
   CaretRight,
   CaretUpDown,
   SignOut,
 } from "@phosphor-icons/react/dist/ssr"
-import { activeProjects, footerItems, navItems, type NavItemId, type SidebarFooterItemId } from "@/lib/data/sidebar"
+import { activeProjects, navItems, type NavItemId } from "@/lib/data/sidebar"
 import { useAuth } from "@/contexts/AuthContext"
 import { useProjects } from "@/hooks/useProjects"
 
@@ -48,10 +47,6 @@ const navItemPaths: Record<NavItemId, string> = {
   clients: "/clients",
   invoices: "/invoices",
   contracts: "/contracts",
-}
-
-const footerItemIcons: Record<SidebarFooterItemId, React.ComponentType<{ className?: string }>> = {
-  settings: Gear,
 }
 
 export function AppSidebar() {
@@ -189,17 +184,6 @@ export function AppSidebar() {
 
       <SidebarFooter className="border-t border-border/40 p-2">
         <SidebarMenu>
-          {footerItems.map((item) => {
-            const Icon = footerItemIcons[item.id]
-            return (
-              <SidebarMenuItem key={item.label}>
-                <SidebarMenuButton className="h-9 rounded-lg px-3 text-muted-foreground">
-                  {Icon && <Icon className="h-[18px] w-[18px]" />}
-                  <span>{item.label}</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            )
-          })}
           <SidebarMenuItem>
             <SidebarMenuButton
               onClick={handleSignOut}
